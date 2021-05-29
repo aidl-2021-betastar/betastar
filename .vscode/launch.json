@@ -13,8 +13,152 @@
                 "run",
                 "--agent",
                 "random",
-                "--map",
+                "--environment",
                 "SC2MoveToBeacon-v0",
+                "--num-workers",
+                "1",
+                "--dryrun"
+            ]
+        },
+        {
+            "name": "Move To Beacon 2D (Random)",
+            "type": "python",
+            "request": "launch",
+            "module": "betastar",
+            "args": [
+                "run",
+                "--agent",
+                "random",
+                "--environment",
+                "SC2MoveToBeacon-v1",
+                "--num-workers",
+                "1",
+                "--dryrun"
+            ]
+        },
+        {
+            "name": "Collect Mineral Shards 1D (Random)",
+            "type": "python",
+            "request": "launch",
+            "module": "betastar",
+            "args": [
+                "run",
+                "--agent",
+                "random",
+                "--environment",
+                "SC2CollectMineralShards-v0",
+                "--num-workers",
+                "1",
+                "--dryrun"
+            ]
+        },
+        {
+            "name": "Collect Mineral Shards 2D (Random)",
+            "type": "python",
+            "request": "launch",
+            "module": "betastar",
+            "args": [
+                "run",
+                "--agent",
+                "random",
+                "--environment",
+                "SC2CollectMineralShards-v1",
+                "--num-workers",
+                "1",
+                "--dryrun"
+            ]
+        },
+        {
+            "name": "Collect Mineral Shards Groups (Random)",
+            "type": "python",
+            "request": "launch",
+            "module": "betastar",
+            "args": [
+                "run",
+                "--agent",
+                "random",
+                "--environment",
+                "SC2CollectMineralShards-v2",
+                "--num-workers",
+                "1",
+                "--dryrun"
+            ]
+        },
+        {
+            "name": "Find and defeat zerglings (Random)",
+            "type": "python",
+            "request": "launch",
+            "module": "betastar",
+            "args": [
+                "run",
+                "--agent",
+                "random",
+                "--environment",
+                "SC2FindAndDefeatZerglings-v0",
+                "--num-workers",
+                "1",
+                "--dryrun"
+            ]
+        },
+        {
+            "name": "Defeat roaches (Random)",
+            "type": "python",
+            "request": "launch",
+            "module": "betastar",
+            "args": [
+                "run",
+                "--agent",
+                "random",
+                "--environment",
+                "SC2DefeatRoaches-v0",
+                "--num-workers",
+                "1",
+                "--dryrun"
+            ]
+        },
+        {
+            "name": "Defeat zerglings and banelings (Random)",
+            "type": "python",
+            "request": "launch",
+            "module": "betastar",
+            "args": [
+                "run",
+                "--agent",
+                "random",
+                "--environment",
+                "SC2DefeatZerglingsAndBanelings-v0",
+                "--num-workers",
+                "1",
+                "--dryrun"
+            ]
+        },
+        {
+            "name": "Collect minerals and gas (Random)",
+            "type": "python",
+            "request": "launch",
+            "module": "betastar",
+            "args": [
+                "run",
+                "--agent",
+                "random",
+                "--environment",
+                "SC2CollectMineralsAndGas-v0",
+                "--num-workers",
+                "1",
+                "--dryrun"
+            ]
+        },
+        {
+            "name": "Builds Marines (Random)",
+            "type": "python",
+            "request": "launch",
+            "module": "betastar",
+            "args": [
+                "run",
+                "--agent",
+                "random",
+                "--environment",
+                "SC2BuildMarines-v0",
                 "--num-workers",
                 "1",
                 "--dryrun"

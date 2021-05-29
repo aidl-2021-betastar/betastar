@@ -2,22 +2,28 @@ import gym
 import wandb
 from gym import wrappers
 from tqdm import tqdm
-import betastar.env # import PySC2Env
-
+import betastar.envs
+import random
+from absl import flags
+FLAGS = flags.FLAGS
+FLAGS([__file__])
 
 def run(config: wandb.Config):
-    env = wrappers.Monitor(gym.make(config.environment), directory="/tmp/betastar-random", force=True)
+    env = gym.make(config.environment)
+    env.settings['visualize'] = True
+    env.settings['step_mul'] = config.game_speed
+    env.settings['random_seed'] = random.seed(0)
+    env = wrappers.Monitor(env, directory="/tmp/betastar-random", force=True)
 
     with tqdm(range(config.episodes), unit="episodes") as pbar:
         for episode in pbar:
             observation = env.reset()
-            for t in range(100):
-                if episode % config.render_interval == 0:
-                    env.render()
+            done = False
+            t = 0
+            while not done:
                 action = env.action_space.sample()
                 observation, reward, done, info = env.step(action)
                 pbar.set_postfix(steps=str(t))
-                if done:
-                    break
+                t += 1
 
     env.close()

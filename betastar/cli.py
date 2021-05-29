@@ -25,7 +25,9 @@ def cli():
 @click.option(
     "--environment",
     "-e",
-    type=click.Choice(["SC2MoveToBeacon-v0"]),
+    type=click.Choice([
+        'SC2Game-v0', 'SC2MoveToBeacon-v0', 'SC2MoveToBeacon-v1', 'SC2CollectMineralShards-v0', 'SC2CollectMineralShards-v1', 'SC2CollectMineralShards-v2', 'SC2FindAndDefeatZerglings-v0', 'SC2DefeatRoaches-v0', 'SC2DefeatZerglingsAndBanelings-v0', 'SC2CollectMineralsAndGas-v0', 'SC2BuildMarines-v0',
+    ]),
     default="SC2MoveToBeacon-v0",
 )
 @click.option("--episodes", default=500, help="Number of episodes to run.")
@@ -36,7 +38,8 @@ def cli():
 @click.option("--learning-rate", default=1e-2)
 @click.option("--num-workers", default=int(mp.cpu_count() / 2.0))
 @click.option("--seed", default=42)
-@click.option("--dryrun", is_flag=True)
+@click.option("--game-speed", default=8, help="How many game steps per agent step (action/observation). None means use the map default")
+@click.option("--dryrun", is_flag=True, help="Whether to run wandb in dryrun mode or not" )
 def run(
     agent: str,
     environment: str,
@@ -47,6 +50,7 @@ def run(
     num_workers: int,
     seed: int,
     dryrun: bool,
+    game_speed: int,
 ):
     if dryrun or agent == "random":
         os.environ["WANDB_MODE"] = "dryrun"
@@ -62,7 +66,8 @@ def run(
             "learning_rate": learning_rate,
             "num_workers": num_workers,
             "seed": seed,
-            "environment": environment
+            "environment": environment,
+            "game_speed": game_speed,
         },
         monitor_gym=True,
     )
