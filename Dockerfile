@@ -22,7 +22,7 @@ RUN wget -O ~/sc2.zip http://blzdistsc2-a.akamaihd.net/Linux/SC2.4.10.zip
 RUN unzip -P iagreetotheeula ~/sc2.zip -d ~/
 RUN rm -fr ~/sc2.zip
 
-#RUN mv ~/StarCraftII/Libs/libstdc++.so.6 ~/StarCraftII/Libs/libstdc++.so.6.temp
+RUN mv ~/StarCraftII/Libs/libstdc++.so.6 ~/StarCraftII/Libs/libstdc++.so.6.temp
 
 WORKDIR /root
 

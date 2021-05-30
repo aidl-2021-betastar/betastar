@@ -20,7 +20,8 @@ class RandomAgent(base_agent.BaseAgent):
                 done = False
                 t = 0
                 while not done:
-                    if self.env.env.__class__ == SC2GameEnv:
+                    self.env.render()
+                    if self.game_env.__class__ == SC2GameEnv:
                         action = self.select_action()
                     else:
                         action = self.env.action_space.sample()
@@ -31,7 +32,7 @@ class RandomAgent(base_agent.BaseAgent):
         self.env.close()
 
     def select_action(self):
-        function_id = numpy.random.choice(self.env.env.available_actions)
+        function_id = numpy.random.choice(self.game_env.available_actions)
         args = [[numpy.random.randint(0, size) for size in arg.sizes]
-                for arg in self.env.env._env.action_spec()[0].functions[function_id].args]
+                for arg in self.sc2env.action_spec()[0].functions[function_id].args]
         return [function_id, *args]

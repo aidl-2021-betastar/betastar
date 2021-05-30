@@ -16,8 +16,11 @@
 # Imported from https://github.com/islamelnabarawy/sc2gym
 
 import logging
-
+from pathlib import Path
+import wandb
 import gym
+import pygame
+import numpy as np
 from pysc2.env import sc2_env
 from pysc2.env.environment import StepType
 from pysc2.lib import actions
@@ -31,13 +34,15 @@ _NO_OP = actions.FUNCTIONS.no_op.id
 
 
 class SC2GameEnv(gym.Env):
-    metadata = {'render.modes': [None, 'human']}
+    metadata = {'render.modes': ['rgb_array', 'human']}
     default_settings = {
         'agent_interface_format': sc2_env.parse_agent_interface_format(
             feature_screen=84,
             feature_minimap=64,
         ),
-        'players': [sc2_env.Agent(sc2_env.Race.terran)]
+        'players': [sc2_env.Agent(sc2_env.Race.terran)],
+        'save_replay_episodes': 1,
+        'replay_dir': '/tmp/betastar'
     }
 
     def __init__(self, **kwargs) -> None:
@@ -74,6 +79,21 @@ class SC2GameEnv(gym.Env):
         self._total_reward += reward
         return obs, reward, obs.step_type == StepType.LAST, {}
 
+    def last_replay(self) -> wandb.Artifact:
+        artifact = wandb.Artifact(name=f"{self._env.map_name}.{self._episode}", type='replay', metadata={'map': self._env.map_name, 'reward': self._episode_reward, 'episode': self._episode})
+        replays = list(Path('/tmp/betastar').glob('*.SC2Replay'))
+        replays.sort()
+        artifact.add_file(str(replays[-1]))
+        return artifact
+
+    def render(self, mode="human"):
+        if mode == "rgb_array":
+            x = self._env._renderer_human._window.copy()
+            array = pygame.surfarray.pixels3d(x)
+            array = np.transpose(array, axes=(1, 0, 2))
+            del x
+            return array
+
     def reset(self):
         if self._env is None:
             self._init_env()
@@ -82,6 +102,11 @@ class SC2GameEnv(gym.Env):
                         self._episode, self._episode_reward, self._num_step)
             logger.info("Got %d total reward so far, with an average reward of %g per episode",
                         self._total_reward, float(self._total_reward) / self._episode)
+            wandb.log({
+                'episode_reward/now': self._episode_reward,
+                'episode_reward/avg': float(self._total_reward) / self._episode,
+                }, step=self._episode)
+            wandb.log_artifact(self.last_replay())
         self._episode += 1
         self._num_step = 0
         self._episode_reward = 0
@@ -105,6 +130,7 @@ class SC2GameEnv(gym.Env):
                         self._episode, self._episode_reward, self._num_step)
             logger.info("Got %d total reward, with an average reward of %g per episode",
                         self._total_reward, float(self._total_reward) / self._episode)
+            wandb.log({'episode_reward/now': self._episode_reward, 'episode_reward/avg': float(self._total_reward) / self._episode}, step=self._episode)
         if self._env is not None:
             self._env.close()
         super().close()
