@@ -37,4 +37,4 @@ def select_action(obs, env):
     function_id = numpy.random.choice(obs.observation.available_actions)
     args = [[numpy.random.randint(0, size) for size in arg.sizes]
             for arg in env.env._env.action_spec()[0].functions[function_id].args]
-    return actions.FunctionCall(function_id, args)
+    return [function_id, *args]

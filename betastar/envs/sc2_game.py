@@ -96,6 +96,7 @@ class SC2GameEnv(gym.Env):
     def _init_env(self):
         args = {**self.default_settings, **self._kwargs}
         logger.debug("Initializing SC2Env with settings: %s", args)
+        print(f"Initializing SC2Env with settings: {args}")
         self._env = sc2_env.SC2Env(**args)
 
     def close(self):
