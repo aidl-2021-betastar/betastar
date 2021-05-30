@@ -111,7 +111,7 @@ class SC2GameEnv(gym.Env):
     @property
     def settings(self):
         return self._kwargs
-
+    
     @property
     def action_spec(self):
         if self._env is None:
