@@ -30,7 +30,7 @@ __author__ = 'Islam Elnabarawy'
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-_NO_OP = actions.FUNCTIONS.no_op.id
+_NO_OP = actions.FUNCTIONS.no_op.id # type: ignore
 
 
 class SC2GameEnv(gym.Env):

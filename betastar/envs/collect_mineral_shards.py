@@ -27,20 +27,20 @@ _PLAYER_RELATIVE_SCALE = features.SCREEN_FEATURES.player_relative.scale
 
 _SELECTED = features.SCREEN_FEATURES.selected.index
 
-_SELECT_ARMY = actions.FUNCTIONS.select_army.id
+_SELECT_ARMY = actions.FUNCTIONS.select_army.id # type: ignore
 _SELECT_ALL = [0]
 
-_CONTROL_GROUP = actions.FUNCTIONS.select_control_group.id
+_CONTROL_GROUP = actions.FUNCTIONS.select_control_group.id # type: ignore
 _GROUP_RECALL = [0]
 _GROUP_SET = [1]
 
-_SELECT_UNIT = actions.FUNCTIONS.select_unit.id
+_SELECT_UNIT = actions.FUNCTIONS.select_unit.id # type: ignore
 _SELECT_SINGLE = [0]
 
-_MOVE_SCREEN = actions.FUNCTIONS.Move_screen.id
+_MOVE_SCREEN = actions.FUNCTIONS.Move_screen.id # type: ignore
 _NOT_QUEUED = [0]
 
-_NO_OP = actions.FUNCTIONS.no_op.id
+_NO_OP = actions.FUNCTIONS.no_op.id # type: ignore
 
 
 class CollectMineralShards1dEnv(BaseMovement1dEnv):
@@ -83,7 +83,7 @@ class CollectMineralShardsGroupsEnv(BaseMovement2dEnv):
 
     def _translate_action(self, action):
         for ix, act in enumerate(action):
-            if act < 0 or act > self.action_space.nvec[ix]:
+            if act < 0 or act > self.action_space.nvec[ix]: # type: ignore
                 return [_NO_OP]
         self._safe_step([_CONTROL_GROUP, _GROUP_RECALL, [action[0] + 1]])
         return [_MOVE_SCREEN, _NOT_QUEUED, action[1:]]
@@ -95,7 +95,7 @@ class CollectMineralShardsGroupsEnv(BaseMovement2dEnv):
         return space
 
     def _extract_observation(self, obs):
-        shape = (1, ) + self.observation_space.shape[1:]
+        shape = (1, ) + self.observation_space.shape[1:] # type: ignore
         obs = np.concatenate((
             obs.observation["feature_screen"][_PLAYER_RELATIVE].reshape(shape),
             obs.observation['feature_screen'][_SELECTED].reshape(shape)
