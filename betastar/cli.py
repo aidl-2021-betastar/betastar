@@ -7,7 +7,7 @@ import torch
 import torch.multiprocessing as mp
 import wandb
 
-from betastar import random_agent
+from betastar.agents.random_agent import RandomAgent
 
 
 @click.group()
@@ -30,7 +30,7 @@ def cli():
     ]),
     default="SC2MoveToBeacon-v0",
 )
-@click.option("--episodes", default=500, help="Number of episodes to run.")
+@click.option("--episodes", default=5, help="Number of episodes to run.")
 @click.option(
     "--render-interval", default=200, help="How many episodes to skip between renders"
 )
@@ -38,8 +38,8 @@ def cli():
 @click.option("--learning-rate", default=1e-2)
 @click.option("--num-workers", default=int(mp.cpu_count() / 2.0))
 @click.option("--seed", default=42)
-@click.option("--game-speed", default=8, help="How many game steps per agent step (action/observation). None means use the map default")
-@click.option("--dryrun", is_flag=True, help="Whether to run wandb in dryrun mode or not" )
+@click.option("--game-speed", default=None, help="How many game steps per agent step (action/observation). None means use the map default")
+@click.option("--dryrun", is_flag=True, help="Whether to run wandb in dryrun mode or not")
 def run(
     agent: str,
     environment: str,
@@ -79,4 +79,4 @@ def run(
     torch.manual_seed(config.seed)
 
     if agent == "random":
-        random_agent.run(config)
+        RandomAgent(config).run()
