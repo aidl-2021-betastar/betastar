@@ -24,3 +24,13 @@ The easiest way to run an agent is within the Run & Debug panel in VSCode. In or
 From the Run & Debug panel select the launch configuration you want to execute and click on the play button. You can also add or modify existing configurations by editing the `.vscode/launch.json` file.
 
 You can also run an agent without debugging with `python -m betastar run` (use `run --help` to see the available options).
+
+## Troubleshooting
+
+### The VNC server seems to have shut down. How do I restart the whole graphics thing?
+
+Although rebuilding the container will work, issuing this command in a VSCode terminal (which runs inside the container) is easier:
+
+```bash
+supervisord -c /workspaces/betastar/.devcontainer/supervisord.conf
+```

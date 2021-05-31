@@ -1,3 +1,4 @@
+from betastar.agents.a3c import A3C
 import os
 import random
 
@@ -19,7 +20,7 @@ def cli():
 @click.option(
     "--agent",
     "-a",
-    type=click.Choice(["random"]),
+    type=click.Choice(["random", "a3c"]),
     default="random",
 )
 @click.option(
@@ -80,3 +81,5 @@ def run(
 
     if agent == "random":
         RandomAgent(config).run()
+    elif agent == "a3c":
+        A3C(config).run()

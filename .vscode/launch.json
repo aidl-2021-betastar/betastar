@@ -5,6 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Move To Beacon (Random)",
             "type": "python",
             "request": "launch",
@@ -79,6 +86,22 @@
                 "random",
                 "--environment",
                 "SC2CollectMineralShards-v2",
+                "--num-workers",
+                "1",
+                "--dryrun"
+            ]
+        },
+        {
+            "name": "Find and defeat zerglings (A3C)",
+            "type": "python",
+            "request": "launch",
+            "module": "betastar",
+            "args": [
+                "run",
+                "--agent",
+                "a3c",
+                "--environment",
+                "SC2FindAndDefeatZerglings-v0",
                 "--num-workers",
                 "1",
                 "--dryrun"
