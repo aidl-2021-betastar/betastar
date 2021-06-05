@@ -2,7 +2,6 @@ import numpy
 import wandb
 from absl import flags
 from betastar.agents import base_agent
-from betastar.envs import SC2GameEnv
 from tqdm import tqdm
 import torch as T
 from torch import nn

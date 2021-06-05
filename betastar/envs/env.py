@@ -103,6 +103,17 @@ class PySC2Env(gym.Env):
             len(self.action_ids),
         ] + list(action_args))
 
+    def random_action(self):
+        action = self.action_space.sample()
+        if self.is_available_action(action[0]):
+            return action
+        else:
+            return np.zeros_like(action) # no-op
+
+    def is_available_action(self, action_idx: int):
+        return self.action_mask[np.arange(self.action_space.nvec[0])][action_idx] == 1.0 # type: ignore
+
+
     def step(self, action):
         defaults = {
             'control_group_act': 0,
@@ -119,13 +130,6 @@ class PySC2Env(gym.Env):
             arg_name = arg_type.name
             if arg_name in self.args:
                 arg = action[self.args_idx[arg_name]]
-                # # arg = action[self.args.index(arg_name)]
-                # # pysc2 expects all args in their separate lists
-                # if type(arg) not in [list, tuple]:
-                #     arg = [arg]
-                # # pysc2 expects spatial coords, but we have flattened => attempt to fix
-                # # if len(arg_type.sizes) > 1 and len(arg) == 1:
-                # #     arg = [arg[0] % self.spatial_dim, arg[0] // self.spatial_dim]
                 args.append(arg)
             else:
                 args.append([defaults[arg_name]])
@@ -172,81 +176,3 @@ class PySC2Env(gym.Env):
             array = np.transpose(array, axes=(1, 0, 2))
             del x
             return array
-
-    # def step(self, action):
-    #     defaults = {
-    #         'control_group_act': 0,
-    #         'control_group_id': 0,
-    #         'select_point_act': 0,
-    #         'select_unit_act': 0,
-    #         'select_unit_id': 0,
-    #         'build_queue_id': 0,
-    #         'unload_id': 0,
-    #     }
-    #     action_id_idx, args = action[0], []
-    #     action_id = self.action_ids[action_id_idx]
-    #     for arg_type in actions.FUNCTIONS[action_id].args:
-    #         arg_name = arg_type.name
-    #         if arg_name in self.args:
-    #             arg = action[self.args_idx[arg_name]]
-    #             # # arg = action[self.args.index(arg_name)]
-    #             # # pysc2 expects all args in their separate lists
-    #             # if type(arg) not in [list, tuple]:
-    #             #     arg = [arg]
-    #             # # pysc2 expects spatial coords, but we have flattened => attempt to fix
-    #             # # if len(arg_type.sizes) > 1 and len(arg) == 1:
-    #             # #     arg = [arg[0] % self.spatial_dim, arg[0] // self.spatial_dim]
-    #             args.append(arg)
-    #         else:
-    #             args.append([defaults[arg_name]])
-
-    #     response = self._env.step([actions.FunctionCall(action_id, args)])[0]
-    #     raw_obs = response.observation
-
-    #     # action masking
-    #     action_id_mask = np.zeros(len(self.action_ids))
-    #     for available_action_id in raw_obs['available_actions']:
-    #         action_id_mask[self.reverse_action_ids[available_action_id]] = 1
-    #     self.action_mask = np.zeros(self.action_space.nvec.sum())
-    #     self.action_mask[:len(self.action_ids)] = action_id_mask
-    #     self.action_mask[len(self.action_ids):len(self.action_ids)+2] = 1
-    #     self.available_actions = raw_obs['available_actions']
-
-    #     return np.concatenate([
-    #         raw_obs["feature_screen"][self.feature_masks["screen"]].flatten(),
-    #         raw_obs["feature_minimap"][self.feature_masks["minimap"]].flatten(),
-    #         np.zeros(len(self.action_ids)+len(self.temp_obs["player"]))
-    #     ]), response.reward, response.step_type == StepType.LAST, {}
-
-    # def reset(self):
-    #     response = self._env.reset()[0]
-    #     raw_obs = response.observation
-        
-    #     # action masking
-    #     action_id_mask = np.zeros(len(self.action_ids))
-    #     for available_action_id in raw_obs['available_actions']:
-    #         action_id_mask[self.reverse_action_ids[available_action_id]] = 1
-    #     self.action_mask = np.zeros(self.action_space.nvec.sum())
-    #     self.action_mask[:len(self.action_ids)] = action_id_mask
-    #     self.action_mask[len(self.action_ids):len(self.action_ids)+2] = 1
-    #     self.available_actions = raw_obs['available_actions']
-
-    #     return np.concatenate([
-    #         raw_obs["feature_screen"][self.feature_masks["screen"]].flatten(),
-    #         raw_obs["feature_minimap"][self.feature_masks["minimap"]].flatten(),
-    #         np.zeros(len(self.action_ids)+len(self.temp_obs["player"]))
-    #     ])
-
-ACTIONS_MINIGAMES =  [0, 1, 2, 3, 4, 6, 7, 12, 13, 42, 44, 50, 91, 183, 234, 309, 331, 332, 333, 334, 451, 452, 490]
-ACTIONS_MINIGAMES_ALL = ACTIONS_MINIGAMES + [11, 71, 72, 73, 74, 79, 140, 168, 239, 261, 264, 269, 274, 318, 335, 336, 453, 477]
-ACTIONS_ALL = [f.id for f in actions.FUNCTIONS]
-
-
-if __name__ == "__main__":
-    from absl import flags
-
-    FLAGS = flags.FLAGS
-    FLAGS([__file__])
-    env = PySC2Env(action_ids=ACTIONS_MINIGAMES)
-    print('hey')
-

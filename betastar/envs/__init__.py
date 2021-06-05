@@ -1,83 +1,70 @@
 from gym.envs.registration import register
-from betastar.envs.sc2_game import SC2GameEnv
-from betastar.envs.move_to_beacon import MoveToBeacon1dEnv
-from betastar.envs.move_to_beacon import MoveToBeacon2dEnv
-from betastar.envs.collect_mineral_shards import CollectMineralShards1dEnv
-from betastar.envs.collect_mineral_shards import CollectMineralShards2dEnv
-from betastar.envs.collect_mineral_shards import CollectMineralShardsGroupsEnv
+from pysc2.lib import actions
+from betastar.envs.env import PySC2Env
 
-register(
-    id='SC2Game-v0',
-    entry_point='betastar.envs:SC2GameEnv',
-    kwargs={}
-)
+ACTIONS_MINIGAMES =  [0, 1, 2, 3, 4, 6, 7, 12, 13, 42, 44, 50, 91, 183, 234, 309, 331, 332, 333, 334, 451, 452, 490]
+ACTIONS_MINIGAMES_ALL = ACTIONS_MINIGAMES + [11, 71, 72, 73, 74, 79, 140, 168, 239, 261, 264, 269, 274, 318, 335, 336, 453, 477]
+ACTIONS_ALL = [f.id for f in actions.FUNCTIONS] # type: ignore
 
 register(
     id='SC2MoveToBeacon-v0',
-    entry_point='betastar.envs:MoveToBeacon1dEnv',
-    kwargs={}
-)
-
-register(
-    id='SC2MoveToBeacon-v1',
-    entry_point='betastar.envs:MoveToBeacon2dEnv',
-    kwargs={}
+    entry_point='betastar.envs:PySC2Env',
+    kwargs={
+        'map_name': "MoveToBeacon",
+        "action_ids": ACTIONS_MINIGAMES
+    }
 )
 
 register(
     id='SC2CollectMineralShards-v0',
-    entry_point='betastar.envs:CollectMineralShards1dEnv',
-    kwargs={}
-)
-
-register(
-    id='SC2CollectMineralShards-v1',
-    entry_point='betastar.envs:CollectMineralShards2dEnv',
-    kwargs={}
-)
-
-register(
-    id='SC2CollectMineralShards-v2',
-    entry_point='betastar.envs:CollectMineralShardsGroupsEnv',
-    kwargs={}
+    entry_point='betastar.envs:PySC2Env',
+    kwargs={
+        'map_name': "CollectMineralShards",
+        "action_ids": ACTIONS_MINIGAMES
+    }
 )
 
 register(
     id='SC2FindAndDefeatZerglings-v0',
-    entry_point='betastar.envs:SC2GameEnv',
+    entry_point='betastar.envs:PySC2Env',
     kwargs={
-        'map_name': 'FindAndDefeatZerglings'
+        'map_name': "FindAndDefeatZerglings",
+        "action_ids": ACTIONS_MINIGAMES
     }
 )
 
 register(
     id='SC2DefeatRoaches-v0',
-    entry_point='betastar.envs:SC2GameEnv',
+    entry_point='betastar.envs:PySC2Env',
     kwargs={
-        'map_name': 'DefeatRoaches'
+        'map_name': "DefeatRoaches",
+        "action_ids": ACTIONS_MINIGAMES
     }
 )
 
 register(
     id='SC2DefeatZerglingsAndBanelings-v0',
-    entry_point='betastar.envs:SC2GameEnv',
+    entry_point='betastar.envs:PySC2Env',
     kwargs={
-        'map_name': 'DefeatZerglingsAndBanelings'
+        'map_name': "DefeatZerglingsAndBanelings",
+        "action_ids": ACTIONS_MINIGAMES
     }
 )
 
 register(
     id='SC2CollectMineralsAndGas-v0',
-    entry_point='betastar.envs:SC2GameEnv',
+    entry_point='betastar.envs:PySC2Env',
     kwargs={
-        'map_name': 'CollectMineralsAndGas'
+        'map_name': "CollectMineralsAndGas",
+        "action_ids": ACTIONS_MINIGAMES
     }
 )
 
 register(
     id='SC2BuildMarines-v0',
-    entry_point='betastar.envs:SC2GameEnv',
+    entry_point='betastar.envs:PySC2Env',
     kwargs={
-        'map_name': 'BuildMarines'
+        'map_name': "BuildMarines",
+        "action_ids": ACTIONS_MINIGAMES
     }
 )

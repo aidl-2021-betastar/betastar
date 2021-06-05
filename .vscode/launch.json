@@ -28,22 +28,6 @@
             ]
         },
         {
-            "name": "Move To Beacon 2D (Random)",
-            "type": "python",
-            "request": "launch",
-            "module": "betastar",
-            "args": [
-                "run",
-                "--agent",
-                "random",
-                "--environment",
-                "SC2MoveToBeacon-v1",
-                "--num-workers",
-                "1",
-                "--dryrun"
-            ]
-        },
-        {
             "name": "Collect Mineral Shards 1D (Random)",
             "type": "python",
             "request": "launch",
@@ -60,7 +44,7 @@
             ]
         },
         {
-            "name": "Collect Mineral Shards 2D (Random)",
+            "name": "Collect Mineral Shards (Random)",
             "type": "python",
             "request": "launch",
             "module": "betastar",
@@ -69,23 +53,7 @@
                 "--agent",
                 "random",
                 "--environment",
-                "SC2CollectMineralShards-v1",
-                "--num-workers",
-                "1",
-                "--dryrun"
-            ]
-        },
-        {
-            "name": "Collect Mineral Shards Groups (Random)",
-            "type": "python",
-            "request": "launch",
-            "module": "betastar",
-            "args": [
-                "run",
-                "--agent",
-                "random",
-                "--environment",
-                "SC2CollectMineralShards-v2",
+                "SC2CollectMineralShards-v0",
                 "--num-workers",
                 "1",
                 "--dryrun"
