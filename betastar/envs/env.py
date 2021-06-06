@@ -1,8 +1,10 @@
 # from: https://raw.githubusercontent.com/vwxyzjn/gym-pysc2/master/gym_pysc2/envs/pysc2env.py
 # which was inspired by: https://github.com/inoryy/reaver/blob/master/reaver/envs/sc2.py
+from typing import List, Tuple
 import numpy as np
 import gym
 import pygame
+import torch as T
 from gym import error, spaces, utils
 from gym.utils import seeding
 from pysc2.env import sc2_env
@@ -13,9 +15,11 @@ from pysc2.env.environment import StepType
 class PySC2Env(gym.Env):
     metadata = {'render.modes': ['rgb_array', 'human']}
 
+    action_ids: List[int]
+
     def __init__(
         self,
-        action_ids=None,
+        action_ids: List[int]=[],
         spatial_dim=16,
         step_mul=8,
         map_name="MoveToBeacon",
@@ -29,7 +33,7 @@ class PySC2Env(gym.Env):
         self.visualize = visualize
         
         # preprocess
-        if not self.action_ids:
+        if len(self.action_ids) == 0:
             self.action_ids = [f.id for f in actions.FUNCTIONS] # type: ignore
         self.reverse_action_ids = np.zeros(max(self.action_ids)+1, dtype=np.int16)
         for idx, aid in enumerate(self.action_ids):
@@ -69,11 +73,11 @@ class PySC2Env(gym.Env):
         )
         self.feature_flatten_shapes = (len(obs_features['screen'])*spatial_dim*spatial_dim,) + \
             (len(obs_features['minimap'])*spatial_dim*spatial_dim,) + \
-            (len(self.action_ids)+len(self.temp_obs["player"]),)
+            (len(self.action_ids) + len(self.temp_obs['player']),)
         self.feature_original_shapes = [
             (len(obs_features['screen']), spatial_dim, spatial_dim),
             (len(obs_features['minimap']), spatial_dim, spatial_dim),
-            (len(self.action_ids)+len(self.temp_obs["player"]),)
+            (len(self.action_ids) + len(self.temp_obs['player']),)
         ]
 
         # action space
@@ -135,39 +139,37 @@ class PySC2Env(gym.Env):
                 args.append([defaults[arg_name]])
 
         response = self._env.step([actions.FunctionCall(action_id, args)])[0]
-        raw_obs = response.observation
-
-        # action masking
-        action_id_mask = np.zeros(len(self.action_ids)) # type: ignore 
-        for available_action_id in raw_obs['available_actions']:
-            action_id_mask[self.reverse_action_ids[available_action_id]] = 1
-        self.action_mask = np.ones(self.action_space.nvec.sum()) # type: ignore 
-        self.action_mask[:len(self.action_ids)] = action_id_mask # type: ignore 
-        self.available_actions = raw_obs['available_actions']
-
-        return np.concatenate([
-            raw_obs["feature_screen"][self.feature_masks["screen"]].flatten(),
-            raw_obs["feature_minimap"][self.feature_masks["minimap"]].flatten(),
-            np.zeros(len(self.action_ids)+len(self.temp_obs["player"])) # type: ignore 
-        ]), response.reward, response.step_type == StepType.LAST, {}
+        return self._format_observation(response.observation), response.reward, response.step_type == StepType.LAST, {}
 
     def reset(self):
         response = self._env.reset()[0]
-        raw_obs = response.observation
+        return self._format_observation(response.observation)
         
+
+    def _format_observation(self, raw_obs) -> Tuple[T.Tensor, T.Tensor, T.Tensor]:
         # action masking
-        action_id_mask = np.zeros(len(self.action_ids)) # type: ignore 
+        action_id_mask = np.zeros(len(self.action_ids))
         for available_action_id in raw_obs['available_actions']:
             action_id_mask[self.reverse_action_ids[available_action_id]] = 1
         self.action_mask = np.ones(self.action_space.nvec.sum()) # type: ignore 
-        self.action_mask[:len(self.action_ids)] = action_id_mask  # type: ignore 
+        self.action_mask[:len(self.action_ids)] = action_id_mask
         self.available_actions = raw_obs['available_actions']
 
-        return np.concatenate([
-            raw_obs["feature_screen"][self.feature_masks["screen"]].flatten(),
-            raw_obs["feature_minimap"][self.feature_masks["minimap"]].flatten(),
-            np.zeros(len(self.action_ids)+len(self.temp_obs["player"])) # type: ignore 
-        ])
+        screen = T.from_numpy(raw_obs["feature_screen"][self.feature_masks["screen"]].flatten()).float()
+        minimap = T.from_numpy(raw_obs["feature_minimap"][self.feature_masks["minimap"]].flatten()).float()
+
+        available_actions = np.zeros(len(self.action_ids))
+        available_actions[self.reverse_action_ids[raw_obs['available_actions']]] = 1
+
+        non_spatial = T.from_numpy(np.concatenate([available_actions, raw_obs['player']])).float()
+
+        screen_shape, minimap_shape, non_spatial_shape = self.feature_original_shapes
+
+        return (
+            screen.reshape(screen_shape),
+            minimap.reshape(minimap_shape),
+            non_spatial.reshape(non_spatial_shape)
+        )
 
     def render(self, mode="human"):
         if mode == "rgb_array":
