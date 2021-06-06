@@ -71,9 +71,13 @@
                 "--environment",
                 "SC2FindAndDefeatZerglings-v0",
                 "--num-workers",
-                "1",
+                "2",
+                "--episodes-per-epoch",
+                "3",
+                "--epochs",
+                "2",
                 "--dryrun"
-            ]
+            ],
         },
         {
             "name": "Find and defeat zerglings (Random)",

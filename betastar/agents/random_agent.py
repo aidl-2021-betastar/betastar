@@ -1,3 +1,4 @@
+from betastar.envs.env import spawn_env
 import numpy
 import wandb
 from absl import flags
@@ -12,16 +13,17 @@ class RandomAgent(base_agent.BaseAgent):
         super().__init__(config)
 
     def run(self):
-        with tqdm(range(self.episodes), unit="episodes") as pbar:
+        env = spawn_env(self.config.environment, self.config.game_speed)
+        with tqdm(range(self.config.episodes_per_epoch), unit="episodes") as pbar:
             for episode in pbar:
-                observation = self.env.reset()
+                observation = env.reset()
                 done = False
                 t = 0
                 while not done:
-                    self.env.render()
+                    env.render()
                     action = self.env.random_action() # type: ignore
-                    observation, reward, done, info = self.env.step(action)
+                    observation, reward, done, info = env.step(action)
                     pbar.set_postfix(steps=str(t))
                     t += 1
 
-        self.env.close()
+        env.close()
