@@ -1,3 +1,4 @@
+from functools import partial
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,7 +27,8 @@ from torch import Tensor, nn
 from torch.distributions.categorical import Categorical
 from torch.optim import Adam
 from tqdm import tqdm
-from tqdm_multiprocess import TqdmMultiProcessPool
+import torch.multiprocessing as mp
+#from tqdm_multiprocess import TqdmMultiProcessPool
 
 FLAGS = flags.FLAGS
 FLAGS([__file__])
@@ -189,7 +191,12 @@ class ResilientPlayer:
         self.model = ActorCritic(env=self.env)
         self.model.load_state_dict(self.state_dict)
         self.model.eval()
-        return self.env.reset()
+        while True:
+            try:
+                return self.env.reset()
+            except protocol.ConnectionError:
+                print('FFS.........')
+                time.sleep(1)
 
     def stop(self):
         if self.env is not None:
@@ -206,57 +213,55 @@ def play_episodes(
     environment: str,
     game_speed: int,
     episodes_to_play: int,
-    rank: int,
-    tqdm_func,
-    global_tqdm,
+    rank: int
 ) -> Tuple[List[Episode], List[float]]:
     player = ResilientPlayer(state_dict, environment, game_speed, rank==0)
+    try:
+        episodes = []
+        episode_rewards = []
 
-    episodes = []
-    episode_rewards = []
+        for _episode_number in range(episodes_to_play):
+            observation = player.restart()
 
-    for _episode_number in range(episodes_to_play):
-        observation = player.restart()
+            success = False
+            while not success:
+                try:
+                    episode = Episode()
+                    episode_reward = 0.0
 
-        success = False
-        while not success:
-            try:
-                episode = Episode()
-                episode_reward = 0.0
+                    done = False
+                    while not done:
+                        screen, minimap, non_spatial = observation
+                        with T.no_grad():
+                            actions, values = player.model(
+                                screen.unsqueeze(0),
+                                minimap.unsqueeze(0),
+                                non_spatial.unsqueeze(0),
+                                action_mask=player.env.action_mask,
+                            )
+                            action = actions[0]
+                            value = values[0]
+                        observation, reward, done, _info = player.env.step(action)
 
-                done = False
-                while not done:
-                    screen, minimap, non_spatial = observation
-                    with T.no_grad():
-                        actions, values = player.model(
-                            screen.unsqueeze(0),
-                            minimap.unsqueeze(0),
-                            non_spatial.unsqueeze(0),
-                            action_mask=player.env.action_mask,
-                        )
-                        action = actions[0]
-                        value = values[0]
-                    observation, reward, done, _info = player.env.step(action)
+                        value = 0.0 if done else value.item()
 
-                    value = 0.0 if done else value.item()
+                        episode_reward += reward
 
-                    episode_reward += reward
+                        episode.add(observation, action, reward, value)
+                    episodes.append(episode)
+                    episode_rewards.append(episode_reward)
 
-                    episode.add(observation, action, reward, value)
-                episodes.append(episode)
-                episode_rewards.append(episode_reward)
+                    observation = player.env.reset()
+                    success = True
+                    #global_tqdm.update()
+                except protocol.ConnectionError:
+                    print("FUCK, again for FFFFFFUCKS sake")
+                    time.sleep(2) # deep breath
+                    observation = player.restart()
 
-                observation = player.env.reset()
-                success = True
-                global_tqdm.update()
-            except protocol.ConnectionError:
-                print("FUCK, again for FFFFFFUCKS sake")
-                time.sleep(2) # deep breath
-                observation = player.restart()
-
-    player.stop()
-
-    return episodes, episode_rewards
+        return episodes, episode_rewards
+    finally:
+        player.stop()
 
 def dataloader(episodes: List[Episode], batch_size: int) -> List[List[Step]]:
     episodes = [episode for episode in episodes if len(episode) >= batch_size]
@@ -313,9 +318,10 @@ class A3C(base_agent.BaseAgent):
         return artifact
 
     def run(self):
+        ctx = mp.get_context('spawn')
         device = T.device("cuda" if T.cuda.is_available() else "cpu")
 
-        env = spawn_env(self.config.environment, self.config.game_speed)
+        env = spawn_env(self.config.environment, self.config.game_speed, monitor=False)
         self.model = ActorCritic(env=env).to(device)
         self.model.train()
         env.close()
@@ -342,40 +348,21 @@ class A3C(base_agent.BaseAgent):
             # break
 
             episodes: List[Episode] = []
-
-            def error_callback(result):
-                print("Error!")
-
-            def done_callback(result):
-                print("Done. Result: ", result)
-
-            pool = TqdmMultiProcessPool(self.config.num_workers)
-            initial_tasks = [
-                (
-                    play_episodes,
-                    (
-                        self.model.state_dict(),
-                        self.config.environment,
-                        self.config.game_speed,
-                        self.config.episodes_per_epoch,
-                        rank,
-                    ),
-                )
-                for rank in range(self.config.num_workers)
-            ]
-
-            episodes: List[Episode] = []
             episode_rewards: List[float] = []
-            with tqdm(
-                total=self.config.episodes_per_epoch, dynamic_ncols=True
-            ) as global_progress:
-                global_progress.set_description("global")
-                results: List[Tuple[List[Episode], List[float]]] = pool.map(
-                    global_progress, initial_tasks, error_callback, done_callback
-                )  # type: ignore
-                for eps in results:
+
+            play = partial(play_episodes,
+              self.model.state_dict(),
+              self.config.environment,
+              self.config.game_speed,
+              self.config.episodes_per_epoch
+            )
+            
+            with ctx.Pool(self.config.num_workers) as pool:
+                for eps in list(tqdm(pool.imap(play, range(self.config.num_workers)))):
                     episodes.extend(eps[0])
                     episode_rewards.extend(eps[1])
+
+            pool.join()
 
             actor_losses = []
             critic_losses = []
