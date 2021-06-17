@@ -12,19 +12,22 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Move To Beacon (Random)",
+            "name": "Move To Beacon (A3C)",
             "type": "python",
             "request": "launch",
             "module": "betastar",
             "args": [
                 "run",
                 "--agent",
-                "random",
+                "a3c",
                 "--environment",
                 "SC2MoveToBeacon-v0",
                 "--num-workers",
                 "1",
-                "--dryrun"
+                "--episodes-per-epoch",
+                "1",
+                "--epochs",
+                "15"
             ]
         },
         {
@@ -71,11 +74,11 @@
                 "--environment",
                 "SC2FindAndDefeatZerglings-v0",
                 "--num-workers",
-                "2",
+                "1",
                 "--episodes-per-epoch",
-                "3",
+                "4",
                 "--epochs",
-                "2",
+                "5",
                 "--dryrun"
             ],
         },

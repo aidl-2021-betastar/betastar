@@ -25,10 +25,10 @@ from betastar.envs.env import (
 )
 from torch import Tensor, nn
 from torch.distributions.categorical import Categorical
+from torch.utils.data import Dataset, DataLoader
 from torch.optim import Adam
 from tqdm import tqdm
 import torch.multiprocessing as mp
-#from tqdm_multiprocess import TqdmMultiProcessPool
 
 FLAGS = flags.FLAGS
 FLAGS([__file__])
@@ -42,6 +42,7 @@ class Episode:
     actions: List[Action] = field(default_factory=list)
     rewards: List[Reward] = field(default_factory=list)
     values: List[Value] = field(default_factory=list)
+    action_masks: List[np.ndarray] = field(default_factory=list)
     count: int = 0
 
     def __repr__(self) -> str:
@@ -54,15 +55,16 @@ class Episode:
         return [self[idx] for idx in idxs]
 
     def __getitem__(self, idx):
-        return self.states[idx], self.actions[idx], self.rewards[idx], self.values[idx]
+        return self.states[idx], self.actions[idx], self.rewards[idx], self.values[idx], self.action_masks[idx]
 
     def add(
-        self, observation: Observation, action: Action, reward: Reward, value: Value
+        self, observation: Observation, action: Action, reward: Reward, value: Value, action_mask: np.ndarray
     ):
         self.states.append(observation)
         self.actions.append(action)
         self.rewards.append(reward)
         self.values.append(value)
+        self.action_masks.append(action_mask)
         self.count += 1
 
 
@@ -82,7 +84,10 @@ class Encoder(nn.Module):
         minimap_channels: int = 4,
         non_spatial_channels: int = 34,
         encoded_size: int = 128,
+        spatial_dim: int = 64
     ):
+        conv_out_width = int(spatial_dim / 2 - 2)
+        
         super().__init__()
 
         self.screen = nn.Sequential(
@@ -92,7 +97,7 @@ class Encoder(nn.Module):
             nn.Conv2d(16, 32, kernel_size=2),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(32 * 6 * 6, encoded_size),
+            nn.Linear(32 * conv_out_width * conv_out_width, encoded_size),
         )
 
         self.minimap = nn.Sequential(
@@ -102,7 +107,7 @@ class Encoder(nn.Module):
             nn.Conv2d(16, 32, kernel_size=2),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(32 * 6 * 6, encoded_size),
+            nn.Linear(32 * conv_out_width * conv_out_width, encoded_size),
         )
 
         self.non_spatial = nn.Sequential(
@@ -134,13 +139,14 @@ class ActorCritic(nn.Module):
             screen_channels=screen_channels,
             minimap_channels=minimap_channels,
             non_spatial_channels=non_spatial_channels,
+            spatial_dim=env.spatial_dim
         )
 
         self.actor = nn.Sequential(
             nn.Linear(encoded_size * 3, self.action_space.sum()),  # type: ignore
         )
 
-        self.critic = nn.Sequential(nn.Linear(encoded_size * 3, 1), nn.Tanh())
+        self.critic = nn.Linear(encoded_size * 3, 1)
 
     def forward(
         self, screens, minimaps, non_spatials, action_mask: ActionMask
@@ -233,21 +239,32 @@ def play_episodes(
                     while not done:
                         screen, minimap, non_spatial = observation
                         with T.no_grad():
-                            actions, values = player.model(
+                            latents = player.model.encode(
                                 screen.unsqueeze(0),
                                 minimap.unsqueeze(0),
                                 non_spatial.unsqueeze(0),
+                            )
+                            actions = player.model.act(
+                                latents,
                                 action_mask=player.env.action_mask,
                             )
                             action = actions[0]
-                            value = values[0]
-                        observation, reward, done, _info = player.env.step(action)
+                            observation, reward, done, _info = player.env.step(action)
 
-                        value = 0.0 if done else value.item()
+                            # compute value of next state
+                            next_screen, next_minimap, next_non_spatial = observation
+                            latents = player.model.encode(
+                                next_screen.unsqueeze(0),
+                                next_minimap.unsqueeze(0),
+                                next_non_spatial.unsqueeze(0),
+                            )
+                            next_value = player.model.critic(latents)[0]
+
+                        value = 0.0 if done else next_value.item()
 
                         episode_reward += reward
 
-                        episode.add(observation, action, reward, value)
+                        episode.add(observation, action, reward, value, player.env.action_mask)
                     episodes.append(episode)
                     episode_rewards.append(episode_reward)
 
@@ -263,36 +280,57 @@ def play_episodes(
     finally:
         player.stop()
 
-def dataloader(episodes: List[Episode], batch_size: int) -> List[List[Step]]:
-    episodes = [episode for episode in episodes if len(episode) >= batch_size]
+class TrajectoryDataset(Dataset):
+    def __init__(self, episodes: List[Episode], n_step: int = 20) -> None:
+        super().__init__()
+        self.trajectories = []
 
-    batches = []
+        for episode in episodes:
+            idxs = np.arange(len(episode))
+            chunks_n = math.floor(len(episode) / n_step)
 
-    for episode in episodes:
-        idxs = np.arange(len(episode))
-        chunks_n = math.floor(len(episode) / batch_size)
+            for broad_chunk in np.array_split(idxs, chunks_n):
+                self.trajectories.append(episode.lookup(broad_chunk[:n_step]))
+                self.trajectories.append(episode.lookup(broad_chunk[::-1][:n_step][::-1]))
+    
+    def __len__(self):
+        return len(self.trajectories)
 
-        for broad_chunk in np.array_split(idxs, chunks_n):
-            batches.append(episode.lookup(broad_chunk[:batch_size]))
-            batches.append(episode.lookup(broad_chunk[::-1][:batch_size][::-1]))
-
-    shuffle(batches)
-    return batches
+    def __getitem__(self, idx):
+        return self.trajectories[idx]
 
 
 def compute_returns(
-    rewards: List[float],
-    last_q_value: float,
+    rewards: Tensor,
+    values: Tensor,
     reward_decay: float,
-):
-    rews = Tensor(rewards).flip(0).view(-1)
-    discounted_rewards = []
-    R = last_q_value
-    for r in range(rews.shape[0]):
-        R = rews[r] + reward_decay * R
-        discounted_rewards.append(R)
-    return F.normalize(T.stack(discounted_rewards).view(-1), dim=0)
+    n_step: int,
+    batch_size: int,
+):        
+    trajectory_rewards = rewards.split_with_sizes([n_step for x in range(int(len(rewards) / n_step))])
+    trajectory_values = values.split_with_sizes([n_step for x in range(int(len(values) / n_step))])
+    batched_returns = []
+    for (trajectory_reward, trajectory_value) in zip(trajectory_rewards, trajectory_values):
+        rews = trajectory_reward.flip(0).view(-1)
+        discounted_rewards = []
+        R = trajectory_value[-1] # last next_value of the trajectory, = G
+        for r in range(rews.shape[0]):
+            R = rews[r] + reward_decay * R
+            discounted_rewards.append(R)
+        batched_returns.append(F.normalize(T.stack(discounted_rewards).view(-1), dim=0))
+    return T.cat(batched_returns)
 
+
+def collate(batch):
+    screens = T.stack([step[0][0] for trajectory in batch for step in trajectory])
+    minimaps = T.stack([step[0][1] for trajectory in batch for step in trajectory])
+    non_spatials = T.stack([step[0][2] for trajectory in batch for step in trajectory])
+    actions = T.stack([T.from_numpy(step[1]) for trajectory in batch for step in trajectory], dim=0)
+    rewards = T.tensor([step[2] for trajectory in batch for step in trajectory])
+    values = T.tensor([step[3] for trajectory in batch for step in trajectory])
+    action_masks = T.tensor([step[4] for trajectory in batch for step in trajectory])
+
+    return screens, minimaps, non_spatials, actions, rewards, values, action_masks
 
 class A3C(base_agent.BaseAgent):
     def __init__(self, config: wandb.Config) -> None:
@@ -335,51 +373,43 @@ class A3C(base_agent.BaseAgent):
         for epoch in range(self.config.epochs):
             # 1. play some episodes
 
-            # EMERGENCY WARNING: Uncomment this piece of code if things break
-            # play_episodes(
-            #     self.model.state_dict(),  # type: ignore
-            #     self.config.environment,
-            #     self.config.game_speed,
-            #     self.config.episodes_per_epoch,
-            #     0,
-            #     tqdm,
-            #     tqdm,
-            #     )
-            # break
-
             episodes: List[Episode] = []
             episode_rewards: List[float] = []
 
-            play = partial(play_episodes,
-              self.model.state_dict(),
-              self.config.environment,
-              self.config.game_speed,
-              self.config.episodes_per_epoch
-            )
-            
-            with ctx.Pool(self.config.num_workers) as pool:
-                for eps in list(tqdm(pool.imap(play, range(self.config.num_workers)))):
-                    episodes.extend(eps[0])
-                    episode_rewards.extend(eps[1])
+            if self.config.num_workers == 1:
+                episodes, episode_rewards = play_episodes(
+                    self.model.state_dict(),  # type: ignore
+                    self.config.environment,
+                    self.config.game_speed,
+                    self.config.episodes_per_epoch,
+                    0
+                    )
+            else:
+                play = partial(play_episodes,
+                self.model.state_dict(),
+                self.config.environment,
+                self.config.game_speed,
+                self.config.episodes_per_epoch
+                )
+                
+                with ctx.Pool(self.config.num_workers) as pool:
+                    for eps in list(tqdm(pool.imap(play, range(self.config.num_workers)))):
+                        episodes.extend(eps[0])
+                        episode_rewards.extend(eps[1])
 
-            pool.join()
+                    pool.join()
 
-            actor_losses = []
-            critic_losses = []
             real_losses = []
 
-            for batch in dataloader(episodes, batch_size=20):
-                screens = T.stack([step[0][0] for step in batch]).to(device)
-                minimaps = T.stack([step[0][1] for step in batch]).to(device)
-                non_spatials = T.stack([step[0][2] for step in batch]).to(device)
-                actions = T.stack([T.from_numpy(step[1]) for step in batch], dim=0).to(
-                    device
-                )
+            n_step = 200
+            batch_size = 2
 
-                latent = self.model.encoder(screens, minimaps, non_spatials)
-                logits = self.model.actor(
-                    latent
-                )  # no need to mask logits since we're not acting
+            dataloader = DataLoader(TrajectoryDataset(episodes, n_step=n_step), batch_size=batch_size, shuffle=True, collate_fn=collate)
+
+            for screens, minimaps, non_spatials, actions, rewards, values, action_masks in dataloader:
+                latents = self.model.encoder(screens, minimaps, non_spatials)
+                logits = T.where(action_masks.bool(), self.model.actor(latents), T.tensor(-1e8))
+
                 categoricals = self.model.discrete_categorical_distributions(logits)
                 log_probs = T.stack(
                     [
@@ -390,28 +420,41 @@ class A3C(base_agent.BaseAgent):
                 )
 
                 returns = compute_returns(
-                    [step[2] for step in batch],
-                    [step[3] for step in batch][-1],
+                    rewards,
+                    values,
                     self.config.reward_decay,
+                    n_step,
+                    batch_size
                 )
-                values = self.model.critic(latent.detach()).flip(0).view(-1)
+                # the "proper way"
+                # values = self.model.critic(latents.detach()).flip(1).squeeze()
+                # advantages = returns - values.detach()
+                # actor_loss = (-1 * log_probs.sum(dim=1) * advantages).mean()
+                # critic_loss = F.mse_loss(values, returns)
+                # loss = actor_loss + critic_loss
+
+                values = self.model.critic(latents.detach()).flip(1).squeeze()
                 advantages = returns - values.detach()
-                actor_loss = (-1 * log_probs.sum(dim=1) * advantages).sum()
-                critic_loss = F.mse_loss(values, returns)
-                loss = actor_loss + critic_loss
+                actor_loss = -1 * log_probs.sum(dim=1) * advantages
+                critic_loss = advantages.pow(2)
+                loss = (actor_loss + critic_loss).mean()
+
+                # log_prob = m.log_prob(a)
+                # entropy = 0.5 + 0.5 * math.log(2 * math.pi) + torch.log(m.scale)  # exploration
+                # exp_v = log_prob * td.detach() + 0.005 * entropy
+                # a_loss = -exp_v
+                # total_loss = (a_loss + c_loss).mean()
+                # return total_loss
 
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
 
-                actor_losses.append(actor_loss.item())
-                critic_losses.append(critic_loss.item())
                 real_losses.append(loss.item())
 
             metrics = {
                 "episode_reward/mean": np.array(episode_rewards).mean(),
-                "loss/actor": np.array(actor_losses).mean(),
-                "loss/critic": np.array(critic_losses).mean(),
+                "episode_reward/max": np.array(episode_rewards).max(),
                 "loss/real": np.array(real_losses).mean(),
                 "epoch": epoch,
             }
@@ -420,7 +463,6 @@ class A3C(base_agent.BaseAgent):
                     **metrics,
                     "video": self.last_video(epoch)
                 },
-                step=epoch
             )
             wandb.log_artifact(self.last_replay(map_name=self.config.environment, epoch=epoch))
             print(metrics)

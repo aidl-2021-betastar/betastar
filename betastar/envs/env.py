@@ -37,7 +37,7 @@ class PySC2Env(gym.Env):
     def __init__(
         self,
         action_ids: List[int] = [],
-        spatial_dim=16,
+        spatial_dim=64,
         step_mul=8,
         map_name="MoveToBeacon",
         visualize=True,
@@ -197,7 +197,8 @@ class PySC2Env(gym.Env):
         # action masking
         action_id_mask = np.zeros(len(self.action_ids))
         for available_action_id in raw_obs["available_actions"]:
-            action_id_mask[self.reverse_action_ids[available_action_id]] = 1
+            if available_action_id in self.reverse_action_ids:
+                action_id_mask[self.reverse_action_ids[available_action_id]] = 1
         self.action_mask = np.ones(self.action_space.nvec.sum())  # type: ignore
         self.action_mask[: len(self.action_ids)] = action_id_mask
         self.available_actions = raw_obs["available_actions"]
@@ -210,7 +211,9 @@ class PySC2Env(gym.Env):
         ).float()
 
         available_actions = np.zeros(len(self.action_ids))
-        available_actions[self.reverse_action_ids[raw_obs["available_actions"]]] = 1
+        for available_action_id in raw_obs["available_actions"]:
+            if available_action_id in self.reverse_action_ids:
+                available_actions[self.reverse_action_ids[available_action_id]] = 1
 
         non_spatial = T.from_numpy(
             np.concatenate([available_actions, raw_obs["player"]])

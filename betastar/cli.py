@@ -36,7 +36,7 @@ def cli():
     "--render-interval", default=200, help="How many episodes to skip between renders"
 )
 @click.option("--reward-decay", default=0.95, help="Gamma hyperparameter")
-@click.option("--learning-rate", default=1e-2)
+@click.option("--learning-rate", default=1e-3)
 @click.option("--num-workers", default=int(mp.cpu_count()))
 @click.option("--seed", default=42)
 @click.option("--epochs", default=5, help="Total number of [gather experiences / learn from experiences] cycles")
