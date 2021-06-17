@@ -24,10 +24,10 @@
                 "SC2MoveToBeacon-v0",
                 "--num-workers",
                 "1",
-                "--episodes-per-epoch",
-                "1",
+                "--batch-size",
+                "4",
                 "--epochs",
-                "15"
+                "25"
             ]
         },
         {

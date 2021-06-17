@@ -1,4 +1,3 @@
-from betastar.agents.a3c import A3C, Episode
 import os
 import random
 
@@ -8,6 +7,7 @@ import torch
 import torch.multiprocessing as mp
 import wandb
 
+from betastar.agents.a3c import A3C
 from betastar.agents.random_agent import RandomAgent
 
 
@@ -36,7 +36,11 @@ def cli():
     "--render-interval", default=200, help="How many episodes to skip between renders"
 )
 @click.option("--reward-decay", default=0.95, help="Gamma hyperparameter")
-@click.option("--learning-rate", default=1e-3)
+@click.option("--batch-size", default=4)
+@click.option("--gae-lambda", default=0.95)
+@click.option("--use-gae", is_flag=True)
+@click.option("--beta", default=0.01, help="Entropy regularisation term")
+@click.option("--learning-rate", default=3e-3)
 @click.option("--num-workers", default=int(mp.cpu_count()))
 @click.option("--seed", default=42)
 @click.option("--epochs", default=5, help="Total number of [gather experiences / learn from experiences] cycles")
@@ -45,9 +49,12 @@ def cli():
 def run(
     agent: str,
     environment: str,
-    episodes_per_epoch: int,
     render_interval: int,
     reward_decay: float,
+    batch_size: int,
+    gae_lambda: float,
+    use_gae: bool,
+    beta: float,
     learning_rate: float,
     num_workers: int,
     seed: int,
@@ -58,16 +65,17 @@ def run(
     if dryrun or agent == "random":
         os.environ["WANDB_MODE"] = "dryrun"
 
-    assert num_workers <= episodes_per_epoch, "Each worker should play at least one episode per epoch"
-
     wandb.init(
         project="betastar",
         entity="aidl-2021-betastar",
         config={
             "agent": agent,
-            "episodes_per_epoch": episodes_per_epoch,
             "render_interval": render_interval,
             "reward_decay": reward_decay,
+            "batch_size": batch_size,
+            "gae_lambda": gae_lambda,
+            "use_gae": use_gae,
+            "beta": beta,
             "learning_rate": learning_rate,
             "num_workers": num_workers,
             "seed": seed,

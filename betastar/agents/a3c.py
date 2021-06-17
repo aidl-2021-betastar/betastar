@@ -1,17 +1,16 @@
-from functools import partial
 import math
-from dataclasses import dataclass, field
-from pathlib import Path
-from random import shuffle
-from typing import List, OrderedDict, Tuple
 import time
+from dataclasses import dataclass, field
+from functools import partial
+from pathlib import Path
+from typing import List, OrderedDict, Tuple
 
 import betastar.envs
 import numpy as np
 import torch as T
+import torch.multiprocessing as mp
 import torch.nn.functional as F
 import wandb
-from pysc2.lib import protocol
 from absl import flags
 from betastar.agents import base_agent
 from betastar.envs.env import (
@@ -23,12 +22,12 @@ from betastar.envs.env import (
     Value,
     spawn_env,
 )
+from pysc2.lib import protocol
 from torch import Tensor, nn
 from torch.distributions.categorical import Categorical
-from torch.utils.data import Dataset, DataLoader
 from torch.optim import Adam
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-import torch.multiprocessing as mp
 
 FLAGS = flags.FLAGS
 FLAGS([__file__])
@@ -43,6 +42,8 @@ class Episode:
     rewards: List[Reward] = field(default_factory=list)
     values: List[Value] = field(default_factory=list)
     action_masks: List[np.ndarray] = field(default_factory=list)
+    dones: List[bool] = field(default_factory=list)
+
     count: int = 0
 
     def __repr__(self) -> str:
@@ -55,16 +56,30 @@ class Episode:
         return [self[idx] for idx in idxs]
 
     def __getitem__(self, idx):
-        return self.states[idx], self.actions[idx], self.rewards[idx], self.values[idx], self.action_masks[idx]
+        return (
+            self.states[idx],
+            self.actions[idx],
+            self.rewards[idx],
+            self.values[idx],
+            self.action_masks[idx],
+            self.dones[idx],
+        )
 
     def add(
-        self, observation: Observation, action: Action, reward: Reward, value: Value, action_mask: np.ndarray
+        self,
+        observation: Observation,
+        action: Action,
+        reward: Reward,
+        value: Value,
+        action_mask: np.ndarray,
+        done: bool,
     ):
         self.states.append(observation)
         self.actions.append(action)
         self.rewards.append(reward)
         self.values.append(value)
         self.action_masks.append(action_mask)
+        self.dones.append(done)
         self.count += 1
 
 
@@ -84,10 +99,10 @@ class Encoder(nn.Module):
         minimap_channels: int = 4,
         non_spatial_channels: int = 34,
         encoded_size: int = 128,
-        spatial_dim: int = 64
+        spatial_dim: int = 64,
     ):
         conv_out_width = int(spatial_dim / 2 - 2)
-        
+
         super().__init__()
 
         self.screen = nn.Sequential(
@@ -139,7 +154,7 @@ class ActorCritic(nn.Module):
             screen_channels=screen_channels,
             minimap_channels=minimap_channels,
             non_spatial_channels=non_spatial_channels,
-            spatial_dim=env.spatial_dim
+            spatial_dim=env.spatial_dim,
         )
 
         self.actor = nn.Sequential(
@@ -183,9 +198,13 @@ class ActorCritic(nn.Module):
 
 
 class ResilientPlayer:
-    def __init__(self,
-    state_dict: OrderedDict[str, Tensor],
-    environment: str, game_speed: int, monitor: bool) -> None:
+    def __init__(
+        self,
+        state_dict: OrderedDict[str, Tensor],
+        environment: str,
+        game_speed: int,
+        monitor: bool,
+    ) -> None:
         self.env = None
         self.state_dict = state_dict
         self.environment = environment
@@ -201,7 +220,7 @@ class ResilientPlayer:
             try:
                 return self.env.reset()
             except protocol.ConnectionError:
-                print('FFS.........')
+                print("FFS.........")
                 time.sleep(1)
 
     def stop(self):
@@ -211,7 +230,6 @@ class ResilientPlayer:
     def restart(self) -> Observation:
         self.stop()
         return self.start()
-        
 
 
 def play_episodes(
@@ -219,9 +237,9 @@ def play_episodes(
     environment: str,
     game_speed: int,
     episodes_to_play: int,
-    rank: int
+    rank: int,
 ) -> Tuple[List[Episode], List[float]]:
-    player = ResilientPlayer(state_dict, environment, game_speed, rank==0)
+    player = ResilientPlayer(state_dict, environment, game_speed, rank == 0)
     try:
         episodes = []
         episode_rewards = []
@@ -248,98 +266,164 @@ def play_episodes(
                                 latents,
                                 action_mask=player.env.action_mask,
                             )
+                            value = player.model.critic(latents)[0]
                             action = actions[0]
                             observation, reward, done, _info = player.env.step(action)
 
                             # compute value of next state
-                            next_screen, next_minimap, next_non_spatial = observation
-                            latents = player.model.encode(
-                                next_screen.unsqueeze(0),
-                                next_minimap.unsqueeze(0),
-                                next_non_spatial.unsqueeze(0),
-                            )
-                            next_value = player.model.critic(latents)[0]
-
-                        value = 0.0 if done else next_value.item()
+                            # next_screen, next_minimap, next_non_spatial = observation
+                            # latents = player.model.encode(
+                            #     next_screen.unsqueeze(0),
+                            #     next_minimap.unsqueeze(0),
+                            #     next_non_spatial.unsqueeze(0),
+                            # )
 
                         episode_reward += reward
 
-                        episode.add(observation, action, reward, value, player.env.action_mask)
+                        episode.add(
+                            observation,
+                            action,
+                            reward,
+                            value,
+                            player.env.action_mask,
+                            done,
+                        )
                     episodes.append(episode)
                     episode_rewards.append(episode_reward)
 
                     observation = player.env.reset()
                     success = True
-                    #global_tqdm.update()
+                    # global_tqdm.update()
                 except protocol.ConnectionError:
                     print("FUCK, again for FFFFFFUCKS sake")
-                    time.sleep(2) # deep breath
+                    time.sleep(2)  # deep breath
                     observation = player.restart()
 
         return episodes, episode_rewards
     finally:
         player.stop()
 
-class TrajectoryDataset(Dataset):
-    def __init__(self, episodes: List[Episode], n_step: int = 20) -> None:
+
+class EpisodeDataset(Dataset):
+    def __init__(self, episodes: List[Episode]) -> None:
         super().__init__()
-        self.trajectories = []
+        self.episodes = episodes
 
-        for episode in episodes:
-            idxs = np.arange(len(episode))
-            chunks_n = math.floor(len(episode) / n_step)
-
-            for broad_chunk in np.array_split(idxs, chunks_n):
-                self.trajectories.append(episode.lookup(broad_chunk[:n_step]))
-                self.trajectories.append(episode.lookup(broad_chunk[::-1][:n_step][::-1]))
-    
     def __len__(self):
-        return len(self.trajectories)
+        return len(self.episodes)
 
     def __getitem__(self, idx):
-        return self.trajectories[idx]
+        return self.episodes[idx]
+
+
+def compute_episode_returns(rewards: Tensor, config: wandb.Config):
+    returns = []
+    R = 0
+    for r in reversed(rewards):
+        R = r + R * config.reward_decay
+        returns.insert(0, R)
+
+    returns = T.tensor(returns)
+    return (returns - returns.mean()) / (
+        returns.std() + np.finfo(np.float32).eps.item()
+    )
+
+
+def compute_advantages(rewards: Tensor, values: Tensor, config: wandb.Config):
+    advantages = []
+    advantage = 0
+    next_value = 0
+
+    for r, v in zip(reversed(rewards), reversed(values)):
+        td_error = r + next_value * config.reward_decay - v
+        advantage = td_error + advantage * config.reward_decay * config.gae_lambda
+        next_value = v
+        advantages.insert(0, advantage)
+
+    advantages = T.stack(advantages)
+    return (advantages - advantages.mean()) / (
+        advantages.std() + np.finfo(np.float32).eps.item()
+    )
 
 
 def compute_returns(
-    rewards: Tensor,
-    values: Tensor,
-    reward_decay: float,
-    n_step: int,
-    batch_size: int,
-):        
-    trajectory_rewards = rewards.split_with_sizes([n_step for x in range(int(len(rewards) / n_step))])
-    trajectory_values = values.split_with_sizes([n_step for x in range(int(len(values) / n_step))])
-    batched_returns = []
-    for (trajectory_reward, trajectory_value) in zip(trajectory_rewards, trajectory_values):
-        rews = trajectory_reward.flip(0).view(-1)
-        discounted_rewards = []
-        R = trajectory_value[-1] # last next_value of the trajectory, = G
-        for r in range(rews.shape[0]):
-            R = rews[r] + reward_decay * R
-            discounted_rewards.append(R)
-        batched_returns.append(F.normalize(T.stack(discounted_rewards).view(-1), dim=0))
-    return T.cat(batched_returns)
+    rewards: Tensor, values: Tensor, dones: Tensor, config: wandb.Config
+):
+    episode_limits = T.where(dones == True)[0] + 1
+    episodes_rewards = rewards.tensor_split(episode_limits, dim=0)[:-1]
+    episodes_values = values.tensor_split(episode_limits, dim=0)[:-1]
+
+    batch_returns = []
+    for (rewards, values) in zip(episodes_rewards, episodes_values):
+        batch_returns.append(compute_episode_returns(rewards, config))
+
+    return T.cat(batch_returns)
+
+
+def compute_gae(rewards: Tensor, values: Tensor, dones: Tensor, config: wandb.Config):
+    episode_limits = T.where(dones == True)[0] + 1
+    episodes_rewards = rewards.tensor_split(episode_limits, dim=0)[:-1]
+    episodes_values = values.tensor_split(episode_limits, dim=0)[:-1]
+
+    batch_advantages = []
+    for (rewards, values) in zip(episodes_rewards, episodes_values):
+        batch_advantages.append(compute_advantages(rewards, values, config))
+
+    return T.cat(batch_advantages)
+
+
+# def compute_returns(
+#     rewards: Tensor,
+#     values: Tensor,
+#     dones: Tensor,
+#     config: wandb.Config
+# ):
+#     trajectory_rewards = rewards.split_with_sizes([n_step for x in range(int(len(rewards) / n_step))])
+#     trajectory_values = values.split_with_sizes([n_step for x in range(int(len(values) / n_step))])
+#     batched_returns = []
+#     for (trajectory_reward, trajectory_value) in zip(trajectory_rewards, trajectory_values):
+#         rews = trajectory_reward.flip(0).view(-1)
+#         discounted_rewards = []
+#         R = trajectory_value[-1] # last next_value of the trajectory, = G
+#         for r in range(rews.shape[0]):
+#             R = rews[r] + reward_decay * R
+#             discounted_rewards.append(R)
+#         batched_returns.append(F.normalize(T.stack(discounted_rewards).view(-1), dim=0))
+#     return T.cat(batched_returns)
 
 
 def collate(batch):
     screens = T.stack([step[0][0] for trajectory in batch for step in trajectory])
     minimaps = T.stack([step[0][1] for trajectory in batch for step in trajectory])
     non_spatials = T.stack([step[0][2] for trajectory in batch for step in trajectory])
-    actions = T.stack([T.from_numpy(step[1]) for trajectory in batch for step in trajectory], dim=0)
+    actions = T.stack(
+        [T.from_numpy(step[1]) for trajectory in batch for step in trajectory], dim=0
+    )
     rewards = T.tensor([step[2] for trajectory in batch for step in trajectory])
     values = T.tensor([step[3] for trajectory in batch for step in trajectory])
     action_masks = T.tensor([step[4] for trajectory in batch for step in trajectory])
+    dones = T.tensor([step[5] for trajectory in batch for step in trajectory])
 
-    return screens, minimaps, non_spatials, actions, rewards, values, action_masks
+    return (
+        screens,
+        minimaps,
+        non_spatials,
+        actions,
+        rewards,
+        values,
+        action_masks,
+        dones,
+    )
+
 
 class A3C(base_agent.BaseAgent):
     def __init__(self, config: wandb.Config) -> None:
         super().__init__(config)
 
     def last_video(self, epoch: int) -> wandb.Video:
-        videos = list(Path('/tmp/betastar').glob('*.mp4'))
+        videos = list(Path("/tmp/betastar").glob("*.mp4"))
         videos.sort()
-        return wandb.Video(str(videos[-1]), f'epoch={epoch}')
+        return wandb.Video(str(videos[-1]), f"epoch={epoch}")
 
     def last_replay(self, map_name: str, epoch: int) -> wandb.Artifact:
         artifact = wandb.Artifact(
@@ -356,7 +440,7 @@ class A3C(base_agent.BaseAgent):
         return artifact
 
     def run(self):
-        ctx = mp.get_context('spawn')
+        ctx = mp.get_context("spawn")
         device = T.device("cuda" if T.cuda.is_available() else "cpu")
 
         env = spawn_env(self.config.environment, self.config.game_speed, monitor=False)
@@ -381,19 +465,22 @@ class A3C(base_agent.BaseAgent):
                     self.model.state_dict(),  # type: ignore
                     self.config.environment,
                     self.config.game_speed,
-                    self.config.episodes_per_epoch,
-                    0
-                    )
-            else:
-                play = partial(play_episodes,
-                self.model.state_dict(),
-                self.config.environment,
-                self.config.game_speed,
-                self.config.episodes_per_epoch
+                    self.config.batch_size,
+                    0,
                 )
-                
+            else:
+                play = partial(
+                    play_episodes,
+                    self.model.state_dict(),
+                    self.config.environment,
+                    self.config.game_speed,
+                    math.ceil(self.config.batch_size / self.config.num_workers),
+                )
+
                 with ctx.Pool(self.config.num_workers) as pool:
-                    for eps in list(tqdm(pool.imap(play, range(self.config.num_workers)))):
+                    for eps in list(
+                        tqdm(pool.imap(play, range(self.config.num_workers)))
+                    ):
                         episodes.extend(eps[0])
                         episode_rewards.extend(eps[1])
 
@@ -401,14 +488,29 @@ class A3C(base_agent.BaseAgent):
 
             real_losses = []
 
-            n_step = 200
             batch_size = 2
 
-            dataloader = DataLoader(TrajectoryDataset(episodes, n_step=n_step), batch_size=batch_size, shuffle=True, collate_fn=collate)
+            dataloader = DataLoader(
+                EpisodeDataset(episodes),
+                batch_size=batch_size,
+                shuffle=True,
+                collate_fn=collate,
+            )
 
-            for screens, minimaps, non_spatials, actions, rewards, values, action_masks in dataloader:
+            for (
+                screens,
+                minimaps,
+                non_spatials,
+                actions,
+                rewards,
+                values,
+                action_masks,
+                dones,
+            ) in dataloader:
                 latents = self.model.encoder(screens, minimaps, non_spatials)
-                logits = T.where(action_masks.bool(), self.model.actor(latents), T.tensor(-1e8))
+                logits = T.where(
+                    action_masks.bool(), self.model.actor(latents), T.tensor(-1e8)
+                )
 
                 categoricals = self.model.discrete_categorical_distributions(logits)
                 log_probs = T.stack(
@@ -419,32 +521,29 @@ class A3C(base_agent.BaseAgent):
                     dim=1,
                 )
 
+                entropy = T.stack(
+                    [categorical.entropy().mean() for categorical in categoricals]
+                ).sum()
+
                 returns = compute_returns(
                     rewards,
                     values,
-                    self.config.reward_decay,
-                    n_step,
-                    batch_size
+                    dones,
+                    self.config,
                 )
-                # the "proper way"
-                # values = self.model.critic(latents.detach()).flip(1).squeeze()
-                # advantages = returns - values.detach()
-                # actor_loss = (-1 * log_probs.sum(dim=1) * advantages).mean()
-                # critic_loss = F.mse_loss(values, returns)
-                # loss = actor_loss + critic_loss
+                advantage = returns - values
+
+                if self.config.use_gae:
+                    pi_advantage = compute_gae(rewards, values, dones, self.config)
+                else:
+                    pi_advantage = advantage
 
                 values = self.model.critic(latents.detach()).flip(1).squeeze()
-                advantages = returns - values.detach()
-                actor_loss = -1 * log_probs.sum(dim=1) * advantages
-                critic_loss = advantages.pow(2)
+                actor_loss = (
+                    -log_probs.sum(dim=1) * pi_advantage.detach()
+                ).mean() - entropy * self.config.beta
+                critic_loss = (returns - values).pow(2).mean()
                 loss = (actor_loss + critic_loss).mean()
-
-                # log_prob = m.log_prob(a)
-                # entropy = 0.5 + 0.5 * math.log(2 * math.pi) + torch.log(m.scale)  # exploration
-                # exp_v = log_prob * td.detach() + 0.005 * entropy
-                # a_loss = -exp_v
-                # total_loss = (a_loss + c_loss).mean()
-                # return total_loss
 
                 opt.zero_grad()
                 loss.backward()
@@ -459,10 +558,9 @@ class A3C(base_agent.BaseAgent):
                 "epoch": epoch,
             }
             wandb.log(
-                {
-                    **metrics,
-                    "video": self.last_video(epoch)
-                },
+                {**metrics, "video": self.last_video(epoch)},
             )
-            wandb.log_artifact(self.last_replay(map_name=self.config.environment, epoch=epoch))
+            wandb.log_artifact(
+                self.last_replay(map_name=self.config.environment, epoch=epoch)
+            )
             print(metrics)

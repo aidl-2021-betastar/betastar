@@ -7,13 +7,11 @@ authors = ["Joan Falcó", "Luis Martin", "Oriol Gual <oriol@gual.me>", "Txus Bac
 [tool.poetry.dependencies]
 python = "^3.9.4"
 torch = "^1.8.1"
-wandb = "^0.10.28"
+wandb = "*"
 click = "^7.1.2"
-# Do not upgrade gym to 0.18+ until https://github.com/openai/gym/issues/1925 is solved
-gym = "^0.17.3"
+gym = "^0.18.3"
 tqdm = "^4.60.0"
 PySC2 = "^3.0.0"
-tqdm-multiprocess = "^0.0.11"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
