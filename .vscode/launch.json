@@ -25,9 +25,10 @@
                 "--num-workers",
                 "1",
                 "--batch-size",
-                "4",
+                "1",
                 "--epochs",
-                "25"
+                "50",
+                "--dryrun",
             ]
         },
         {
@@ -75,7 +76,7 @@
                 "SC2FindAndDefeatZerglings-v0",
                 "--num-workers",
                 "1",
-                "--episodes-per-epoch",
+                "--batch-size",
                 "4",
                 "--epochs",
                 "5",

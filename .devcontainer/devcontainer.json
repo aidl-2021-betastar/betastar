@@ -25,7 +25,7 @@
 	"postCreateCommand": "supervisord -c /workspaces/betastar/.devcontainer/supervisord.conf",
 
 	// Uncomment when using a ptrace-based debugger like C++, Go, and Rust
-	"runArgs": [ "-m","4g", "--memory-reservation=3g" ],
+	"runArgs": [ "-m","10g", "--memory-reservation=8g" ],
 
 	// Uncomment to use the Docker CLI from inside the container. See https://aka.ms/vscode-remote/samples/docker-from-docker.
 	// "mounts": [ "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind" ],

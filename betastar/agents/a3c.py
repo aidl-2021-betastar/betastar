@@ -27,7 +27,7 @@ from torch import Tensor, nn
 from torch.distributions.categorical import Categorical
 from torch.optim import Adam
 from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
 FLAGS = flags.FLAGS
 FLAGS([__file__])
@@ -296,7 +296,7 @@ def play_episodes(
                     # global_tqdm.update()
                 except protocol.ConnectionError:
                     print("FUCK, again for FFFFFFUCKS sake")
-                    time.sleep(2)  # deep breath
+                    time.sleep(1)  # deep breath
                     observation = player.restart()
 
         return episodes, episode_rewards
@@ -454,7 +454,7 @@ class A3C(base_agent.BaseAgent):
 
         wandb.watch(self.model, log="all")
 
-        for epoch in range(self.config.epochs):
+        for epoch in trange(self.config.epochs, unit="epochs"):
             # 1. play some episodes
 
             episodes: List[Episode] = []
@@ -497,59 +497,68 @@ class A3C(base_agent.BaseAgent):
                 collate_fn=collate,
             )
 
-            for (
-                screens,
-                minimaps,
-                non_spatials,
-                actions,
-                rewards,
-                values,
-                action_masks,
-                dones,
-            ) in dataloader:
-                latents = self.model.encoder(screens, minimaps, non_spatials)
-                logits = T.where(
-                    action_masks.bool(), self.model.actor(latents), T.tensor(-1e8)
-                )
-
-                categoricals = self.model.discrete_categorical_distributions(logits)
-                log_probs = T.stack(
-                    [
-                        categorical.log_prob(a)
-                        for a, categorical in zip(actions.transpose(0, 1), categoricals)
-                    ],
-                    dim=1,
-                )
-
-                entropy = T.stack(
-                    [categorical.entropy().mean() for categorical in categoricals]
-                ).sum()
-
-                returns = compute_returns(
+            with tqdm(dataloader, unit="batches") as batches:
+                for (
+                    screens,
+                    minimaps,
+                    non_spatials,
+                    actions,
                     rewards,
                     values,
+                    action_masks,
                     dones,
-                    self.config,
-                )
-                advantage = returns - values
+                ) in batches:
+                    latents = self.model.encoder(screens, minimaps, non_spatials)
+                    logits = T.where(
+                        action_masks.bool(), self.model.actor(latents), T.tensor(-1e8)
+                    )
 
-                if self.config.use_gae:
-                    pi_advantage = compute_gae(rewards, values, dones, self.config)
-                else:
-                    pi_advantage = advantage
+                    categoricals = self.model.discrete_categorical_distributions(logits)
+                    log_probs = T.stack(
+                        [
+                            categorical.log_prob(a)
+                            for a, categorical in zip(actions.transpose(0, 1), categoricals)
+                        ],
+                        dim=1,
+                    )
 
-                values = self.model.critic(latents.detach()).flip(1).squeeze()
-                actor_loss = (
-                    -log_probs.sum(dim=1) * pi_advantage.detach()
-                ).mean() - entropy * self.config.beta
-                critic_loss = (returns - values).pow(2).mean()
-                loss = (actor_loss + critic_loss).mean()
+                    entropy = T.stack(
+                        [categorical.entropy().mean() for categorical in categoricals]
+                    ).sum()
 
-                opt.zero_grad()
-                loss.backward()
-                opt.step()
+                    returns = compute_returns(
+                        rewards,
+                        values,
+                        dones,
+                        self.config,
+                    )
+                    advantage = returns - values
 
-                real_losses.append(loss.item())
+                    if self.config.use_gae:
+                        pi_advantage = compute_gae(rewards, values, dones, self.config)
+                    else:
+                        pi_advantage = advantage
+
+                    values = self.model.critic(latents.detach()).flip(1).squeeze()
+                    actor_loss = (
+                        -log_probs.sum(dim=1) * pi_advantage.detach()
+                    ).mean() - entropy * self.config.beta
+                    critic_loss = (returns - values).pow(2).mean()
+                    loss = (actor_loss + critic_loss).mean()
+
+                    batches.set_postfix(
+                        {
+                            "loss": loss,
+                            "al": actor_loss.item(),
+                            "cl": critic_loss.item(),
+                        }
+                    )
+
+                    opt.zero_grad()
+                    loss.backward()
+                    opt.step()
+
+                    real_losses.append(loss.item())
 
             metrics = {
                 "episode_reward/mean": np.array(episode_rewards).mean(),

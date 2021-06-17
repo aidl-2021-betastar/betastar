@@ -31,7 +31,6 @@ def cli():
     ]),
     default="SC2MoveToBeacon-v0",
 )
-@click.option("--episodes-per-epoch", default=4, help="Number of total episodes to run every epoch.")
 @click.option(
     "--render-interval", default=200, help="How many episodes to skip between renders"
 )

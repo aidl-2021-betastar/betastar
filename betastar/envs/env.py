@@ -34,6 +34,9 @@ class PySC2Env(gym.Env):
 
     action_ids: List[int]
 
+    def close(self):
+        self._env.close()
+
     def __init__(
         self,
         action_ids: List[int] = [],
@@ -237,6 +240,7 @@ class PySC2Env(gym.Env):
 
 
 def spawn_env(environment: str, game_speed: int, monitor=False) -> PySC2Env:
+    env = None
     while True:
         try:
             env = gym.make(environment, visualize=monitor, step_mul=game_speed)
@@ -245,5 +249,7 @@ def spawn_env(environment: str, game_speed: int, monitor=False) -> PySC2Env:
                 env = wrappers.Monitor(env, directory="/tmp/betastar", resume=True)
             return env  # type: ignore
         except protocol.ConnectionError:
+            if env is not None:
+                env.close()
             print("SHITTTTTTTTTTTT trying one more time")
-            time.sleep(2) # deep breath
+            time.sleep(1) # deep breath
