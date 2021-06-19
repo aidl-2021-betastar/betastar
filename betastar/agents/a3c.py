@@ -484,7 +484,7 @@ class A3C(base_agent.BaseAgent):
                         episodes.extend(eps[0])
                         episode_rewards.extend(eps[1])
 
-                    pool.join()
+                    #pool.join()
 
             real_losses = []
 
