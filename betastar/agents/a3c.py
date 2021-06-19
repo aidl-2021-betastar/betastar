@@ -1,3 +1,4 @@
+from betastar.agents.worker import MultiProcEnv
 import math
 import time
 from dataclasses import dataclass, field
@@ -8,7 +9,6 @@ from typing import List, OrderedDict, Tuple
 import betastar.envs
 import numpy as np
 import torch as T
-import torch.multiprocessing as mp
 import torch.nn.functional as F
 import wandb
 from absl import flags
@@ -41,7 +41,7 @@ class Episode:
     actions: List[Action] = field(default_factory=list)
     rewards: List[Reward] = field(default_factory=list)
     values: List[Value] = field(default_factory=list)
-    action_masks: List[np.ndarray] = field(default_factory=list)
+    action_masks: List[ActionMask] = field(default_factory=list)
     dones: List[bool] = field(default_factory=list)
 
     count: int = 0
@@ -71,7 +71,7 @@ class Episode:
         action: Action,
         reward: Reward,
         value: Value,
-        action_mask: np.ndarray,
+        action_mask: Tensor,
         done: bool,
     ):
         self.states.append(observation)
@@ -185,7 +185,7 @@ class ActorCritic(nn.Module):
         This ensures that actions that are not currently available will
         never be sampled.
         """
-        return T.where(T.from_numpy(action_mask).bool(), logits, T.tensor(-1e8))
+        return T.where(action_mask.bool(), logits, T.tensor(-1e8))
 
     def discrete_categorical_distributions(self, logits: Tensor) -> List[Categorical]:
         """
@@ -401,7 +401,7 @@ def collate(batch):
     )
     rewards = T.tensor([step[2] for trajectory in batch for step in trajectory])
     values = T.tensor([step[3] for trajectory in batch for step in trajectory])
-    action_masks = T.tensor([step[4] for trajectory in batch for step in trajectory])
+    action_masks = T.stack([step[4] for trajectory in batch for step in trajectory])
     dones = T.tensor([step[5] for trajectory in batch for step in trajectory])
 
     return (
@@ -440,64 +440,109 @@ class A3C(base_agent.BaseAgent):
         return artifact
 
     def run(self):
-        ctx = mp.get_context("spawn")
-        device = T.device("cuda" if T.cuda.is_available() else "cpu") # type: ignore
+        device = T.device("cuda" if T.cuda.is_available() else "cpu")  # type: ignore
 
         env = spawn_env(self.config.environment, self.config.game_speed, monitor=False)
-        self.model = ActorCritic(env=env).to(device)
-        self.model.train()
+        model = ActorCritic(env=env).to(device)
+        model.train()
+
+        player = ActorCritic(env=env)
+        player.eval()
+
         env.close()
 
         opt = Adam(
-            self.model.parameters(), lr=self.config.learning_rate, betas=(0.92, 0.999)
+            model.parameters(), lr=self.config.learning_rate, betas=(0.92, 0.999)
         )
 
-        wandb.watch(self.model, log="all")
+        wandb.watch(model, log="all")
+
+        env = MultiProcEnv(
+            self.config.environment,
+            self.config.game_speed,
+            count=self.config.num_workers,
+        )
+        env.start()
 
         for epoch in trange(self.config.epochs, unit="epochs"):
+            player.load_state_dict(model.state_dict())  # type: ignore
+            player.eval()
             # 1. play some episodes
 
             episodes: List[Episode] = []
             episode_rewards: List[float] = []
 
-            if self.config.num_workers == 1:
-                episodes, episode_rewards = play_episodes(
-                    self.model.state_dict(),  # type: ignore
-                    self.config.environment,
-                    self.config.game_speed,
-                    self.config.batch_size,
-                    0,
-                )
-            else:
-                play = partial(
-                    play_episodes,
-                    self.model.state_dict(),
-                    self.config.environment,
-                    self.config.game_speed,
-                    math.ceil(self.config.batch_size / self.config.num_workers),
-                )
+            screen, minimap, non_spatial, _reward, _done, action_mask = env.reset()
 
-                with ctx.Pool(self.config.num_workers) as pool:
-                    for eps in list(
-                        tqdm(pool.imap(play, range(self.config.num_workers)))
-                    ):
-                        episodes.extend(eps[0])
-                        episode_rewards.extend(eps[1])
+            episodes = []
+            episodes_ = [Episode() for n in range(self.config.num_workers)]
+            episode_rewards = []
+            episode_rewards_ = [0 for n in range(self.config.num_workers)]
+            played = 0
+            with tqdm(
+                range(self.config.batch_size), unit="episodes", leave=False
+            ) as pbar:
+                while played < self.config.batch_size:
+                    latents = player.encode(screen, minimap, non_spatial)
+                    actions = player.act(
+                        latents,
+                        action_mask=action_mask,
+                    )
+                    values = player.critic(latents)
+                    (
+                        screen,
+                        minimap,
+                        non_spatial,
+                        rewards,
+                        dones,
+                        action_mask,
+                    ) = env.step(actions)
 
-                    #pool.join()
+                    for i in range(self.config.num_workers):
+                        episodes_[i].add(
+                            (screen[i], minimap[i], non_spatial[i]),
+                            actions[i],
+                            rewards[i].item(),
+                            values[i],
+                            action_mask[i],
+                            dones[i].item(),
+                        )
+                        episode_rewards_[i] += rewards[i].item()
+                        if dones[i]:
+                            episodes.append(episodes_[i])
+                            episode_rewards.append(episode_rewards_[i])
+                            episodes_[i] = Episode()
+                            episode_rewards_[i] = 0
+
+                    # reset done workers and set their next state to the initial observations
+                    done_workers = T.where(dones == True)[0]
+                    if len(done_workers) > 0:
+                        (
+                            screen_,
+                            minimap_,
+                            non_spatial_,
+                            _reward,
+                            _done,
+                            action_mask_,
+                        ) = env.reset(only=done_workers.tolist())
+                        screen[done_workers] = screen_
+                        minimap[done_workers] = minimap_
+                        non_spatial[done_workers] = non_spatial_
+                        action_mask[done_workers] = action_mask_
+
+                        played += len(done_workers)
+                        pbar.update(played)
 
             real_losses = []
 
-            batch_size = 2
-
             dataloader = DataLoader(
                 EpisodeDataset(episodes),
-                batch_size=batch_size,
+                batch_size=self.config.batch_size,
                 shuffle=False,
                 collate_fn=collate,
             )
 
-            with tqdm(dataloader, unit="batches") as batches:
+            with tqdm(dataloader, unit="batches", leave=False) as batches:
                 for (
                     screens,
                     minimaps,
@@ -508,16 +553,18 @@ class A3C(base_agent.BaseAgent):
                     action_masks,
                     dones,
                 ) in batches:
-                    latents = self.model.encoder(screens, minimaps, non_spatials)
+                    latents = model.encoder(screens, minimaps, non_spatials)
                     logits = T.where(
-                        action_masks.bool(), self.model.actor(latents), T.tensor(-1e8)
+                        action_masks.bool(), model.actor(latents), T.tensor(-1e8)
                     )
 
-                    categoricals = self.model.discrete_categorical_distributions(logits)
+                    categoricals = model.discrete_categorical_distributions(logits)
                     log_probs = T.stack(
                         [
                             categorical.log_prob(a)
-                            for a, categorical in zip(actions.transpose(0, 1), categoricals)
+                            for a, categorical in zip(
+                                actions.transpose(0, 1), categoricals
+                            )
                         ],
                         dim=1,
                     )
@@ -539,7 +586,7 @@ class A3C(base_agent.BaseAgent):
                     else:
                         pi_advantage = advantage
 
-                    values = self.model.critic(latents.detach()).squeeze()
+                    values = model.critic(latents.detach()).squeeze()
                     actor_loss = (
                         -log_probs.sum(dim=1) * pi_advantage.detach()
                     ).mean() - entropy * self.config.beta
@@ -548,7 +595,7 @@ class A3C(base_agent.BaseAgent):
 
                     batches.set_postfix(
                         {
-                            "loss": loss,
+                            "loss": loss.item(),
                             "al": actor_loss.item(),
                             "cl": critic_loss.item(),
                         }
@@ -572,4 +619,3 @@ class A3C(base_agent.BaseAgent):
             wandb.log_artifact(
                 self.last_replay(map_name=self.config.environment, epoch=epoch)
             )
-            print(metrics)

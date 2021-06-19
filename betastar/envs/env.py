@@ -26,7 +26,7 @@ Reward = float
 Value = Reward
 Done = bool
 Action = np.ndarray
-ActionMask = np.ndarray
+ActionMask = Tensor
 
 
 class PySC2Env(gym.Env):

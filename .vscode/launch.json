@@ -25,7 +25,7 @@
                 "--num-workers",
                 "1",
                 "--batch-size",
-                "1",
+                "2",
                 "--epochs",
                 "50",
                 "--dryrun",

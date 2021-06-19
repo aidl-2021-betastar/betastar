@@ -26,9 +26,21 @@ def cli():
 @click.option(
     "--environment",
     "-e",
-    type=click.Choice([
-        'SC2Game-v0', 'SC2MoveToBeacon-v0', 'SC2MoveToBeacon-v1', 'SC2CollectMineralShards-v0', 'SC2CollectMineralShards-v1', 'SC2CollectMineralShards-v2', 'SC2FindAndDefeatZerglings-v0', 'SC2DefeatRoaches-v0', 'SC2DefeatZerglingsAndBanelings-v0', 'SC2CollectMineralsAndGas-v0', 'SC2BuildMarines-v0',
-    ]),
+    type=click.Choice(
+        [
+            "SC2Game-v0",
+            "SC2MoveToBeacon-v0",
+            "SC2MoveToBeacon-v1",
+            "SC2CollectMineralShards-v0",
+            "SC2CollectMineralShards-v1",
+            "SC2CollectMineralShards-v2",
+            "SC2FindAndDefeatZerglings-v0",
+            "SC2DefeatRoaches-v0",
+            "SC2DefeatZerglingsAndBanelings-v0",
+            "SC2CollectMineralsAndGas-v0",
+            "SC2BuildMarines-v0",
+        ]
+    ),
     default="SC2MoveToBeacon-v0",
 )
 @click.option(
@@ -39,12 +51,22 @@ def cli():
 @click.option("--gae-lambda", default=0.95)
 @click.option("--use-gae", is_flag=True)
 @click.option("--beta", default=0.01, help="Entropy regularisation term")
-@click.option("--learning-rate", default=1e-3)
+@click.option("--learning-rate", default=1e-4)
 @click.option("--num-workers", default=int(mp.cpu_count()))
 @click.option("--seed", default=42)
-@click.option("--epochs", default=5, help="Total number of [gather experiences / learn from experiences] cycles")
-@click.option("--game-speed", default=None, help="How many game steps per agent step (action/observation). None means use the map default")
-@click.option("--dryrun", is_flag=True, help="Whether to run wandb in dryrun mode or not")
+@click.option(
+    "--epochs",
+    default=5,
+    help="Total number of [gather experiences / learn from experiences] cycles",
+)
+@click.option(
+    "--game-speed",
+    default=None,
+    help="How many game steps per agent step (action/observation). None means use the map default",
+)
+@click.option(
+    "--dryrun", is_flag=True, help="Whether to run wandb in dryrun mode or not"
+)
 def run(
     agent: str,
     environment: str,
@@ -82,7 +104,7 @@ def run(
             "environment": environment,
             "game_speed": game_speed,
         },
-        monitor_gym=True,
+        monitor_gym=False,
     )
 
     config = wandb.config
