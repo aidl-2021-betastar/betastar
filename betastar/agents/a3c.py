@@ -441,7 +441,7 @@ class A3C(base_agent.BaseAgent):
 
     def run(self):
         ctx = mp.get_context("spawn")
-        device = T.device("cuda" if T.cuda.is_available() else "cpu")
+        device = T.device("cuda" if T.cuda.is_available() else "cpu") # type: ignore
 
         env = spawn_env(self.config.environment, self.config.game_speed, monitor=False)
         self.model = ActorCritic(env=env).to(device)
@@ -493,7 +493,7 @@ class A3C(base_agent.BaseAgent):
             dataloader = DataLoader(
                 EpisodeDataset(episodes),
                 batch_size=batch_size,
-                shuffle=True,
+                shuffle=False,
                 collate_fn=collate,
             )
 
@@ -524,7 +524,7 @@ class A3C(base_agent.BaseAgent):
 
                     entropy = T.stack(
                         [categorical.entropy().mean() for categorical in categoricals]
-                    ).sum()
+                    ).mean()
 
                     returns = compute_returns(
                         rewards,
@@ -539,12 +539,12 @@ class A3C(base_agent.BaseAgent):
                     else:
                         pi_advantage = advantage
 
-                    values = self.model.critic(latents.detach()).flip(1).squeeze()
+                    values = self.model.critic(latents.detach()).squeeze()
                     actor_loss = (
                         -log_probs.sum(dim=1) * pi_advantage.detach()
                     ).mean() - entropy * self.config.beta
                     critic_loss = (returns - values).pow(2).mean()
-                    loss = (actor_loss + critic_loss).mean()
+                    loss = actor_loss + critic_loss
 
                     batches.set_postfix(
                         {

@@ -39,7 +39,7 @@ def cli():
 @click.option("--gae-lambda", default=0.95)
 @click.option("--use-gae", is_flag=True)
 @click.option("--beta", default=0.01, help="Entropy regularisation term")
-@click.option("--learning-rate", default=3e-3)
+@click.option("--learning-rate", default=1e-3)
 @click.option("--num-workers", default=int(mp.cpu_count()))
 @click.option("--seed", default=42)
 @click.option("--epochs", default=5, help="Total number of [gather experiences / learn from experiences] cycles")
