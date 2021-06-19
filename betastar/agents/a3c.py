@@ -1,18 +1,14 @@
-from betastar.agents.worker import MultiProcEnv
-import math
-import time
 from dataclasses import dataclass, field
-from functools import partial
 from pathlib import Path
-from typing import List, OrderedDict, Tuple
+from typing import List, Tuple
 
 import betastar.envs
 import numpy as np
 import torch as T
-import torch.nn.functional as F
 import wandb
 from absl import flags
 from betastar.agents import base_agent
+from betastar.agents.worker import MultiProcEnv
 from betastar.envs.env import (
     Action,
     ActionMask,
@@ -22,7 +18,6 @@ from betastar.envs.env import (
     Value,
     spawn_env,
 )
-from pysc2.lib import protocol
 from torch import Tensor, nn
 from torch.distributions.categorical import Categorical
 from torch.optim import Adam
@@ -197,113 +192,6 @@ class ActorCritic(nn.Module):
         return [Categorical(logits=logits) for logits in split_logits]
 
 
-class ResilientPlayer:
-    def __init__(
-        self,
-        state_dict: OrderedDict[str, Tensor],
-        environment: str,
-        game_speed: int,
-        monitor: bool,
-    ) -> None:
-        self.env = None
-        self.state_dict = state_dict
-        self.environment = environment
-        self.game_speed = game_speed
-        self.monitor = monitor
-
-    def start(self) -> Observation:
-        self.env = spawn_env(self.environment, self.game_speed, self.monitor)
-        self.model = ActorCritic(env=self.env)
-        self.model.load_state_dict(self.state_dict)
-        self.model.eval()
-        while True:
-            try:
-                return self.env.reset()
-            except protocol.ConnectionError:
-                print("FFS.........")
-                time.sleep(1)
-
-    def stop(self):
-        if self.env is not None:
-            self.env.close()
-
-    def restart(self) -> Observation:
-        self.stop()
-        return self.start()
-
-
-def play_episodes(
-    state_dict: OrderedDict[str, Tensor],
-    environment: str,
-    game_speed: int,
-    episodes_to_play: int,
-    rank: int,
-) -> Tuple[List[Episode], List[float]]:
-    player = ResilientPlayer(state_dict, environment, game_speed, rank == 0)
-    try:
-        episodes = []
-        episode_rewards = []
-
-        for _episode_number in range(episodes_to_play):
-            observation = player.restart()
-
-            success = False
-            while not success:
-                try:
-                    episode = Episode()
-                    episode_reward = 0.0
-
-                    done = False
-                    while not done:
-                        screen, minimap, non_spatial = observation
-                        with T.no_grad():
-                            latents = player.model.encode(
-                                screen.unsqueeze(0),
-                                minimap.unsqueeze(0),
-                                non_spatial.unsqueeze(0),
-                            )
-                            actions = player.model.act(
-                                latents,
-                                action_mask=player.env.action_mask,
-                            )
-                            value = player.model.critic(latents)[0]
-                            action = actions[0]
-                            observation, reward, done, _info = player.env.step(action)
-
-                            # compute value of next state
-                            # next_screen, next_minimap, next_non_spatial = observation
-                            # latents = player.model.encode(
-                            #     next_screen.unsqueeze(0),
-                            #     next_minimap.unsqueeze(0),
-                            #     next_non_spatial.unsqueeze(0),
-                            # )
-
-                        episode_reward += reward
-
-                        episode.add(
-                            observation,
-                            action,
-                            reward,
-                            value,
-                            player.env.action_mask,
-                            done,
-                        )
-                    episodes.append(episode)
-                    episode_rewards.append(episode_reward)
-
-                    observation = player.env.reset()
-                    success = True
-                    # global_tqdm.update()
-                except protocol.ConnectionError:
-                    print("FUCK, again for FFFFFFUCKS sake")
-                    time.sleep(1)  # deep breath
-                    observation = player.restart()
-
-        return episodes, episode_rewards
-    finally:
-        player.stop()
-
-
 class EpisodeDataset(Dataset):
     def __init__(self, episodes: List[Episode]) -> None:
         super().__init__()
@@ -370,26 +258,6 @@ def compute_gae(rewards: Tensor, values: Tensor, dones: Tensor, config: wandb.Co
         batch_advantages.append(compute_advantages(rewards, values, config))
 
     return T.cat(batch_advantages)
-
-
-# def compute_returns(
-#     rewards: Tensor,
-#     values: Tensor,
-#     dones: Tensor,
-#     config: wandb.Config
-# ):
-#     trajectory_rewards = rewards.split_with_sizes([n_step for x in range(int(len(rewards) / n_step))])
-#     trajectory_values = values.split_with_sizes([n_step for x in range(int(len(values) / n_step))])
-#     batched_returns = []
-#     for (trajectory_reward, trajectory_value) in zip(trajectory_rewards, trajectory_values):
-#         rews = trajectory_reward.flip(0).view(-1)
-#         discounted_rewards = []
-#         R = trajectory_value[-1] # last next_value of the trajectory, = G
-#         for r in range(rews.shape[0]):
-#             R = rews[r] + reward_decay * R
-#             discounted_rewards.append(R)
-#         batched_returns.append(F.normalize(T.stack(discounted_rewards).view(-1), dim=0))
-#     return T.cat(batched_returns)
 
 
 def collate(batch):
@@ -502,12 +370,12 @@ class A3C(base_agent.BaseAgent):
                         episodes_[i].add(
                             (screen[i], minimap[i], non_spatial[i]),
                             actions[i],
-                            rewards[i].item(),
+                            rewards[i].item(),  # type: ignore
                             values[i],
                             action_mask[i],
-                            dones[i].item(),
+                            dones[i].item(),  # type: ignore
                         )
-                        episode_rewards_[i] += rewards[i].item()
+                        episode_rewards_[i] += rewards[i].item()  # type: ignore
                         if dones[i]:
                             episodes.append(episodes_[i])
                             episode_rewards.append(episode_rewards_[i])
@@ -619,3 +487,5 @@ class A3C(base_agent.BaseAgent):
             wandb.log_artifact(
                 self.last_replay(map_name=self.config.environment, epoch=epoch)
             )
+
+        env.stop()
