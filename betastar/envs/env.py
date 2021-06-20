@@ -1,31 +1,23 @@
 # from: https://raw.githubusercontent.com/vwxyzjn/gym-pysc2/master/gym_pysc2/envs/pysc2env.py
 # which was inspired by: https://github.com/inoryy/reaver/blob/master/reaver/envs/sc2.py
-import time
 from typing import List, Tuple
-from click import Path
 
 import gym
 import numpy as np
 import pygame
 import torch as T
-from gym import spaces
-
+from gym import spaces, wrappers
 from pysc2.env import sc2_env
 from pysc2.env.environment import StepType
-from pysc2.lib import protocol
 from pysc2.lib import actions, features
-
-
-from gym import wrappers
 from torch import Tensor
-import wandb
 
 Info = dict
 Observation = Tuple[Tensor, Tensor, Tensor]
 Reward = float
 Value = Reward
 Done = bool
-Action = np.ndarray
+Action = Tensor
 ActionMask = Tensor
 
 
@@ -59,7 +51,7 @@ class PySC2Env(gym.Env):
         self.reverse_action_ids = np.zeros(max(self.action_ids) + 1, dtype=np.int16)
         for idx, aid in enumerate(self.action_ids):
             self.reverse_action_ids[aid] = idx
-        
+
         self._env = sc2_env.SC2Env(
             map_name=self.map_name,
             visualize=self.visualize,
@@ -72,7 +64,7 @@ class PySC2Env(gym.Env):
                 )
             ],
             save_replay_episodes=1,
-            replay_dir='/tmp/betastar',
+            replay_dir="/tmp/betastar",
             step_mul=self.step_mul,
             players=[sc2_env.Agent(sc2_env.Race.terran)],
         )
@@ -164,7 +156,8 @@ class PySC2Env(gym.Env):
     def is_available_action(self, action_idx: int) -> bool:
         return self.action_mask[np.arange(self.action_space.nvec[0])][action_idx] == 1.0  # type: ignore
 
-    def step(self, action) -> Tuple[Observation, Reward, Done, Info]:
+    def step(self, action: Action) -> Tuple[Observation, Reward, Done, Info]:
+        action = action.numpy()
         defaults = {
             "control_group_act": 0,
             "control_group_id": 0,
@@ -231,7 +224,7 @@ class PySC2Env(gym.Env):
         )
 
     def render(self, mode="human"):
-        if mode == "rgb_array" and self._env._renderer_human._window is not None:
+        if mode == "rgb_array" and self._env._renderer_human is not None:
             x = self._env._renderer_human._window.copy()
             array = pygame.surfarray.pixels3d(x)
             array = np.transpose(array, axes=(1, 0, 2))
@@ -240,16 +233,7 @@ class PySC2Env(gym.Env):
 
 
 def spawn_env(environment: str, game_speed: int, monitor=False) -> PySC2Env:
-    env = None
-    while True:
-        try:
-            env = gym.make(environment, visualize=monitor, step_mul=game_speed)
-            if monitor:
-                env = wrappers.RecordEpisodeStatistics(env)
-                env = wrappers.Monitor(env, directory="/tmp/betastar", resume=True)
-            return env  # type: ignore
-        except protocol.ConnectionError:
-            if env is not None:
-                env.close()
-            print("SHITTTTTTTTTTTT trying one more time")
-            time.sleep(1) # deep breath
+    env = gym.make(environment, visualize=monitor, step_mul=game_speed)
+    if monitor:
+        env = wrappers.Monitor(env, directory="/tmp/betastar", force=True)
+    return env  # type: ignore

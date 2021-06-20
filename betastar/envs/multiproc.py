@@ -1,3 +1,8 @@
+from absl import flags
+
+FLAGS = flags.FLAGS
+FLAGS([__file__])
+
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
 from typing import Optional
@@ -16,10 +21,11 @@ class ProcEnv(object):
     w_conn: Optional[Connection]
     proc: Optional[Process]
 
-    def __init__(self, environment: str, game_speed: int) -> None:
+    def __init__(self, environment: str, game_speed: int, rank: int) -> None:
         super(ProcEnv).__init__()
         self.environment = environment
         self.game_speed = game_speed
+        self.rank = rank
         self._env = self.conn = self.w_conn = self.proc = None
 
     def start(self):
@@ -44,7 +50,9 @@ class ProcEnv(object):
         while True:
             msg, data = self.w_conn.recv()
             if msg == START:
-                self._env = spawn_env(self.environment, self.game_speed, monitor=False)
+                self._env = spawn_env(
+                    self.environment, self.game_speed, monitor=self.rank == 0
+                )
                 self.w_conn.send(DONE)
             elif msg == STEP:
                 observation, reward, done, _info = self._env.step(data)
@@ -61,7 +69,7 @@ class ProcEnv(object):
 class MultiProcEnv(object):
     def __init__(self, environment: str, game_speed: int, count: int):
         super(MultiProcEnv).__init__()
-        self.envs = [ProcEnv(environment, game_speed) for env in range(count)]
+        self.envs = [ProcEnv(environment, game_speed, rank) for rank in range(count)]
 
     def start(self):
         for env in self.envs:
@@ -81,7 +89,14 @@ class MultiProcEnv(object):
 
     def _observe(self, only=None):
         obs, reward, done, action_mask = zip(*self.wait(only=only))
-        return T.stack([o[0] for o in obs]), T.stack([o[1] for o in obs]), T.stack([o[2] for o in obs]), T.tensor(reward), T.tensor(done), T.stack([T.from_numpy(a) for a in action_mask])
+        return (
+            T.stack([o[0] for o in obs]),
+            T.stack([o[1] for o in obs]),
+            T.stack([o[2] for o in obs]),
+            T.tensor(reward),
+            T.tensor(done),
+            T.stack([T.from_numpy(a) for a in action_mask]),
+        )
 
     def stop(self):
         for e in self.envs:
@@ -90,4 +105,6 @@ class MultiProcEnv(object):
             e.proc.join()
 
     def wait(self, only=None):
-        return [e.wait() for idx, e in enumerate(self.envs) if only is None or idx in only]
+        return [
+            e.wait() for idx, e in enumerate(self.envs) if only is None or idx in only
+        ]
