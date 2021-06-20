@@ -7,7 +7,7 @@ import torch
 import torch.multiprocessing as mp
 import wandb
 
-from betastar.agents.a3c import A2C
+from betastar.agents.a2c import A2C
 from betastar.agents.random_agent import RandomAgent
 
 @click.group()
@@ -19,7 +19,7 @@ def cli():
 @click.option(
     "--agent",
     "-a",
-    type=click.Choice(["random", "a3c"]),
+    type=click.Choice(["random", "a2c"]),
     default="random",
 )
 @click.option(
@@ -126,5 +126,5 @@ def run(
 
     if agent == "random":
         RandomAgent(config).run()
-    elif agent == "a3c":
+    elif agent == "a2c":
         A2C(config).run()
