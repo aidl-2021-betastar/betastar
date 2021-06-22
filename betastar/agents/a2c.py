@@ -322,7 +322,7 @@ class A2C(base_agent.BaseAgent):
                     non_spatials,
                     actions,
                     rewards,
-                    values,
+                    _values,
                     next_values,
                     action_masks,
                     dones,
@@ -331,6 +331,8 @@ class A2C(base_agent.BaseAgent):
                     logits = T.where(
                         action_masks.bool(), model.actor(latents), T.tensor(-1e8)
                     )
+
+                    values = model.critic(latents.detach())
 
                     categoricals = model.discrete_categorical_distributions(logits)
                     log_probs = T.stack(
