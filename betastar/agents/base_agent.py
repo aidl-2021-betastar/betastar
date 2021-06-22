@@ -54,6 +54,7 @@ class BaseAgent(object):
             while played < self.config.batch_size:
                 with T.no_grad():
                     actions = player.act(screen, minimap, non_spatial, action_mask)
+                    used_action_mask = action_mask.clone()
                     values = player.evaluate(screen, minimap, non_spatial)
 
                 (
@@ -75,7 +76,7 @@ class BaseAgent(object):
                         rewards[i].item(),  # type: ignore
                         values[i].item(),  # type: ignore
                         next_values[i].item(),  # type: ignore
-                        action_mask[i],
+                        used_action_mask[i],
                         dones[i].item(),  # type: ignore
                     )
                     episode_rewards_[i] += rewards[i].item()  # type: ignore
