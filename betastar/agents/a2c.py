@@ -100,9 +100,7 @@ class ActorCritic(nn.Module):
             nn.Linear(encoded_size * 3, hidden_size), nn.ReLU()
         )
 
-        self.actor = nn.Sequential(
-            nn.Linear(hidden_size, self.action_space.sum()),  # type: ignore
-        )
+        self.actor = nn.Linear(hidden_size, self.action_space.sum())  # type: ignore
 
         self.critic = nn.Linear(hidden_size, 1)
 
@@ -374,9 +372,7 @@ class A2C(base_agent.BaseAgent):
 
                     values = model.critic(latents.detach()).squeeze()
                     actor_loss = (-log_probs.sum(dim=1) * pi_advantage.detach()).mean()
-                    critic_loss = (returns - values).pow(
-                        2
-                    ).mean() * self.config.critic_coeff
+                    critic_loss = advantage.pow(2).mean() * self.config.critic_coeff
                     entropy_loss = entropy * self.config.entropy_coeff
                     loss = actor_loss + critic_loss - entropy_loss
 

@@ -46,6 +46,7 @@ def cli():
     "--render-interval", default=200, help="How many episodes to skip between renders"
 )
 @click.option("--reward-decay", default=0.95, help="Gamma hyperparameter")
+@click.option("--episodes", default=4)
 @click.option("--batch-size", default=32)
 @click.option("--traj-length", default=16)
 @click.option("--gae-lambda", default=0.95)
@@ -75,6 +76,7 @@ def run(
     environment: str,
     render_interval: int,
     reward_decay: float,
+    episodes: int,
     batch_size: int,
     traj_length: int,
     gae_lambda: float,
@@ -100,6 +102,7 @@ def run(
             "agent": agent,
             "render_interval": render_interval,
             "reward_decay": reward_decay,
+            "episodes": episodes,
             "batch_size": batch_size,
             "traj_length": traj_length,
             "gae_lambda": gae_lambda,

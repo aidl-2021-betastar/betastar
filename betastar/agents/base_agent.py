@@ -50,8 +50,8 @@ class BaseAgent(object):
         episode_rewards = []
         episode_rewards_ = [0 for n in range(self.config.num_workers)]
         played = 0
-        with tqdm(range(self.config.batch_size), unit="episodes", leave=False) as pbar:
-            while played < self.config.batch_size:
+        with tqdm(range(self.config.episodes), unit="episodes", leave=False) as pbar:
+            while played < self.config.episodes:
                 with T.no_grad():
                     actions = player.act(screen, minimap, non_spatial, action_mask)
                     used_action_mask = action_mask.clone()
