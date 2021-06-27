@@ -41,4 +41,4 @@ instances:
 
 scripts:
   train: |
-    /usr/bin/xvfb-run -a python -m betastar run --agent a2c --environment SC2MoveToBeacon-v0 --num-workers 8 --learning-rate 2.5e-3 --episodes 8 --use-ppo --clip-range 0.25 --batch-size 32 --unroll-length 16 --reward-decay 0.99 --gae-lambda 0.95 --entropy-coeff 0.01 --critic-coeff 0.5 --update-epochs 4 --total-steps 10000000
+    /usr/bin/xvfb-run -a python -m betastar run --agent a2c --environment SC2MoveToBeacon-v0 --num-workers 8 --learning-rate 2.5e-3 --episodes 8 --use-ppo --clip-range 0.25 --batch-size 32 --unroll-length 60 --reward-decay 0.99 --gae-lambda 0.95 --entropy-coeff 0.01 --critic-coeff 0.5 --update-epochs 4 --total-steps 10000000

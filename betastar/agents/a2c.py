@@ -4,7 +4,7 @@ import numpy as np
 import torch as T
 import wandb
 from betastar.agents import base_agent
-from betastar.data import Episode, UnrollDataset, collate
+from betastar.data import Trajectory, UnrollDataset, collate
 from betastar.envs.env import Action, ActionMask, PySC2Env, Value, spawn_env
 from betastar.player import Player
 from torch import Tensor, nn
@@ -170,25 +170,25 @@ def compute_returns(
     return T.cat(batch_returns)
 
 
-def compute_advantages(
-    rewards: Tensor, values: Tensor, next_value: float, config: wandb.Config
-):
-    advantages = []
-    advantage = 0
+# def compute_advantages(
+#     rewards: Tensor, values: Tensor, next_value: float, config: wandb.Config
+# ):
+#     advantages = []
+#     advantage = 0
 
-    for r, v in zip(reversed(rewards), reversed(values)):
-        td_error = r + next_value * config.reward_decay - v
-        advantage = td_error + advantage * config.reward_decay * config.gae_lambda
-        next_value = v
-        advantages.insert(0, advantage)
+#     for r, v in zip(reversed(rewards), reversed(values)):
+#         td_error = r + next_value * config.reward_decay - v
+#         advantage = td_error + advantage * config.reward_decay * config.gae_lambda
+#         next_value = v
+#         advantages.insert(0, advantage)
 
-    advantages = T.stack(advantages)
-    if config.normalize_advantages:
-        return (advantages - advantages.mean()) / (
-            advantages.std() + np.finfo(np.float32).eps.item()
-        )
-    else:
-        return advantages
+#     advantages = T.stack(advantages)
+#     if config.normalize_advantages:
+#         return (advantages - advantages.mean()) / (
+#             advantages.std() + np.finfo(np.float32).eps.item()
+#         )
+#     else:
+#         return advantages
 
 
 def compute_gae(
@@ -198,6 +198,7 @@ def compute_gae(
     dones: Tensor,
     config: wandb.Config,
 ) -> Tuple[Tensor, Tensor]:
+    rewards.split(config.unroll_length)
     N = len(rewards)
     advantages = T.zeros_like(rewards).float()
     lastgaelam = 0.0
@@ -214,6 +215,28 @@ def compute_gae(
         )
     returns = advantages + values
     return advantages, returns
+
+def compute_gae_batches(
+    rewards: Tensor, values: Tensor, next_values: Tensor, dones: Tensor, config: wandb.Config
+):
+    """
+    Computes GAE on a series of unrolls.
+    """
+    unroll_rewards = rewards.split(config.unroll_length)
+    unroll_values = values.split(config.unroll_length)
+    unroll_next_values = next_values.split(config.unroll_length)
+    unroll_dones = dones.split(config.unroll_length)
+
+    batch_advantages = []
+    batch_returns = []
+    for (u_rewards, u_values, u_next_values, u_dones) in zip(
+        unroll_rewards, unroll_values, unroll_next_values, unroll_dones
+    ):
+        advs, rets = compute_gae(u_rewards, u_values, u_next_values, u_dones, config)
+        batch_advantages.append(advs)
+        batch_returns.append(rets)
+
+    return T.cat(batch_advantages), T.cat(batch_returns)
 
 
 class A2CPlayer(Player):
@@ -240,9 +263,9 @@ class A2CPlayer(Player):
 
 
 class A2C(base_agent.BaseAgent):
-    def dataloader(self, episodes: List[Episode]) -> DataLoader:
+    def dataloader(self, trajectories: List[Trajectory]) -> DataLoader:
         return DataLoader(
-            UnrollDataset(episodes, self.config.unroll_length),
+            UnrollDataset(trajectories),
             batch_size=self.config.batch_size,
             shuffle=True,
             collate_fn=collate,
@@ -272,12 +295,14 @@ class A2C(base_agent.BaseAgent):
 
         cycles = 0
 
+        self.env.reset()
+
         step_n = 0
         with tqdm(range(self.config.total_steps), unit="steps", leave=False) as pbar:
             while step_n < self.config.total_steps:
                 player.reload_from(model)
 
-                episodes, episode_rewards = self.play(player)
+                trajectories, trajectory_rewards = self.play(player)
 
                 real_losses = []
                 actor_losses = []
@@ -288,7 +313,7 @@ class A2C(base_agent.BaseAgent):
                     range(self.config.update_epochs), unit="epochs", leave=False
                 ):
                     with tqdm(
-                        self.dataloader(episodes), unit="batches", leave=False
+                        self.dataloader(trajectories), unit="batches", leave=False
                     ) as batches:
                         for (
                             screens,
@@ -363,7 +388,7 @@ class A2C(base_agent.BaseAgent):
                             ).mean()
 
                             if self.config.use_gae:
-                                advantages, returns = compute_gae(
+                                advantages, returns = compute_gae_batches(
                                     rewards, values, next_values, dones, self.config
                                 )
                             else:
@@ -412,33 +437,38 @@ class A2C(base_agent.BaseAgent):
                             critic_losses.append(critic_loss.item())
                             entropies.append(entropy_loss.item())
 
-                _max_reward = np.array(episode_rewards).max()
                 metrics = {
-                    "episode_reward/mean": np.array(episode_rewards).mean(),
-                    "episode_reward/max": _max_reward,
                     "loss/real": np.array(real_losses).mean(),
                     "loss/actor": np.array(actor_losses).mean(),
                     "loss/critic": np.array(critic_losses).mean(),
                     "loss/entropy": np.array(entropies).mean()
                 }
-                if cycles % 80 == 0 or step_n > self.config.total_steps:
-                    metrics['video'] = self.last_video(step_n)
+                if cycles % 100 == 0 or step_n > self.config.total_steps:
+                    player.reload_from(model)
+                    test_rewards = self.test(player, episodes=5)
 
-                if _max_reward > max_reward:
-                    wandb.run.summary["episode_reward/max"] = _max_reward
-                    max_reward = _max_reward
+                    _max_reward = np.array(test_rewards).max()
+                    metrics['episode_reward/mean'] = np.array(test_rewards).mean()
+                    metrics['episode_reward/max'] = _max_reward
+
+                    if _max_reward > max_reward:
+                        wandb.run.summary["episode_reward/max"] = _max_reward
+                        max_reward = _max_reward
+
+                    metrics['video'] = self.last_video(step_n)
+                    wandb.log_artifact(
+                        self.last_replay(map_name=self.config.environment, step_n=step_n)
+                    )
+
                 wandb.log(
                     metrics,
                     step=step_n,
                     commit=True
                 )
-                if cycles % 80 == 0 or step_n > self.config.total_steps:
-                    wandb.log_artifact(
-                        self.last_replay(map_name=self.config.environment, step_n=step_n)
-                    )
+
                 cycles += 1
 
-                _played_steps = sum([len(e) for e in episodes])
+                _played_steps = sum([len(e) for e in trajectories])
                 pbar.update(_played_steps)
                 step_n += _played_steps
 

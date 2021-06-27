@@ -9,7 +9,7 @@ from betastar.envs.env import Action, ActionMask, Observation, Reward, Value
 
 
 @dataclass
-class Episode:
+class Trajectory:
     states: List[Observation] = field(default_factory=list)
     actions: List[Action] = field(default_factory=list)
     rewards: List[Reward] = field(default_factory=list)
@@ -65,17 +65,9 @@ class UnrollDataset(Dataset):
     Flatten episodes into neat (at-most) unroll-size chunks.
     """
 
-    def __init__(self, episodes: List[Episode], unroll_size: int) -> None:
+    def __init__(self, trajectories: List[Trajectory]) -> None:
         super().__init__()
-        self.unrolls = []
-        for e in episodes:
-            idx_chunks = T.arange(0, len(e)).long().split(unroll_size)
-            for chunk in idx_chunks:
-                if len(chunk) == unroll_size:
-                    self.unrolls.append(e.lookup(chunk))
-                else:
-                    # get last len(chunk) elements of episode
-                    self.unrolls.append(e.lookup(list(range(-(len(chunk)), 0))))
+        self.unrolls = trajectories
 
     def __len__(self):
         return len(self.unrolls)

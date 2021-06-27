@@ -35,7 +35,8 @@ class PySC2Env(gym.Env):
         spatial_dim=16,
         step_mul=8,
         map_name="MoveToBeacon",
-        rank=0
+        rank=0,
+        monitor=False
     ) -> None:
 
         super().__init__()
@@ -43,7 +44,7 @@ class PySC2Env(gym.Env):
         self.spatial_dim = spatial_dim
         self.step_mul = step_mul
         self.map_name = map_name
-        self.visualize = rank==0
+        self.visualize = monitor
 
         # preprocess
         if len(self.action_ids) == 0:
@@ -63,7 +64,7 @@ class PySC2Env(gym.Env):
                     rgb_minimap=None,
                 )
             ],
-            save_replay_episodes=1 if rank==0 else 0,
+            save_replay_episodes=1 if monitor else 0,
             replay_dir=f"/tmp/betastar",
             step_mul=self.step_mul,
             players=[sc2_env.Agent(sc2_env.Race.terran)],
@@ -149,9 +150,9 @@ class PySC2Env(gym.Env):
     def random_action(self) -> Action:
         action = self.action_space.sample()
         if self.is_available_action(action[0]):
-            return action
+            return action # type: ignore
         else:
-            return np.zeros_like(action)  # no-op
+            return np.zeros_like(action) # type: ignore
 
     def is_available_action(self, action_idx: int) -> bool:
         return self.action_mask[np.arange(self.action_space.nvec[0])][action_idx] == 1.0  # type: ignore
@@ -232,8 +233,8 @@ class PySC2Env(gym.Env):
             return array
 
 
-def spawn_env(environment: str, game_speed: int, rank: int) -> PySC2Env:
-    env = gym.make(environment, rank=rank, step_mul=game_speed)
-    if rank==0:
+def spawn_env(environment: str, game_speed: int, rank: int, monitor=False) -> PySC2Env:
+    env = gym.make(environment, rank=rank, step_mul=game_speed, monitor=monitor)
+    if monitor:
         env = wrappers.Monitor(env, directory="/tmp/betastar", force=True)
     return env  # type: ignore
