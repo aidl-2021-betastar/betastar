@@ -1,63 +1,46 @@
-FROM python:3.9-slim
+FROM codegram/sc2:4.10
 
-RUN apt-get update
-RUN apt-get install build-essential git-core zlib1g-dev libjpeg-dev python-opengl xvfb -y
+ARG CUDA_VERSION=11.0.3
+FROM nvidia/cuda:${CUDA_VERSION}-base-ubuntu20.04
+ARG PYTHON_VERSION=3.9.4
+ARG CUDA_VERSION
 
-RUN set -ex; \
-    apt-get install -y \
-      bash \
-      fluxbox \
-      git \
-      net-tools \
-      novnc \
-      supervisor \
-      x11vnc \
-      xterm \
-      ffmpeg \
-      unzip \
-      libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libfreetype6-dev python3-setuptools python3-dev python3 libportmidi-dev
+COPY --from=0 /root/StarCraftII /root/StarCraftII
 
-# from https://github.com/vwxyzjn/gym-pysc2
-RUN wget -O ~/sc2.zip http://blzdistsc2-a.akamaihd.net/Linux/SC2.4.10.zip
-RUN unzip -P iagreetotheeula ~/sc2.zip -d ~/
-RUN rm -fr ~/sc2.zip
+# Install ubuntu packages
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
+        curl \
+        ca-certificates \
+        sudo \
+        locales \
+        openssh-server \
+        vim && \
+    # Remove the effect of `apt-get update`
+    rm -rf /var/lib/apt/lists/* && \
+    # Make the "en_US.UTF-8" locale
+    localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
+ENV LANG en_US.utf8
 
-RUN mv ~/StarCraftII/Libs/libstdc++.so.6 ~/StarCraftII/Libs/libstdc++.so.6.temp
+# Setup timezone
+ENV TZ=Europe/Madrid
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-WORKDIR /root
-
-RUN wget -q https://github.com/deepmind/pysc2/releases/download/v1.2/mini_games.zip 
-
-RUN wget -q http://blzdistsc2-a.akamaihd.net/MapPacks/Melee.zip
-RUN wget -q http://blzdistsc2-a.akamaihd.net/MapPacks/Ladder2017Season3.zip
-RUN wget -q http://blzdistsc2-a.akamaihd.net/MapPacks/Ladder2017Season2.zip
-RUN wget -q http://blzdistsc2-a.akamaihd.net/MapPacks/Ladder2017Season1.zip
-
-# Uncompress zip files
-RUN unzip -o mini_games.zip -d ~/StarCraftII/Maps/
-RUN unzip -o -P iagreetotheeula Melee.zip -d ~/StarCraftII/Maps/
-RUN unzip -o -P iagreetotheeula Ladder2017Season3.zip -d ~/StarCraftII/Maps/
-RUN unzip -o -P iagreetotheeula Ladder2017Season2.zip -d ~/StarCraftII/Maps/
-RUN unzip -o -P iagreetotheeula Ladder2017Season1.zip -d ~/StarCraftII/Maps/
-
-# Delete zip files
-RUN rm mini_games.zip
-RUN rm Melee.zip
-RUN rm Ladder2017Season3.zip
-RUN rm Ladder2017Season2.zip
-RUN rm Ladder2017Season1.zip
-
-
-ENV HOME=/root \
-    DEBIAN_FRONTEND=noninteractive \
-    LANG=en_US.UTF-8 \
-    LANGUAGE=en_US.UTF-8 \
-    LC_ALL=C.UTF-8 \
-    DISPLAY=:0.0 \
-    DISPLAY_WIDTH=1024 \
-    DISPLAY_HEIGHT=768 \
-    RUN_XTERM=no \
-    RUN_FLUXBOX=yes
+# Install miniconda (python)
+# Referenced PyTorch's Dockerfile:
+#   https://github.com/pytorch/pytorch/blob/master/docker/pytorch/Dockerfile
+RUN curl -o miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+    chmod +x miniconda.sh && \
+    ./miniconda.sh -b -p conda && \
+    rm miniconda.sh && \
+    conda/bin/conda install -y python=$PYTHON_VERSION && \
+    conda/bin/conda install -c pytorch pytorch \
+    conda/bin/conda clean -ya
+ENV PATH $HOME/conda/bin:$PATH
+RUN touch $HOME/.bashrc && \
+    echo "export PATH=$HOME/conda/bin:$PATH" >> $HOME/.bashrc
 
 ENV POETRY_VIRTUALENVS_CREATE=false
 
@@ -67,6 +50,3 @@ ADD pyproject.toml .
 ADD poetry.lock .
 ADD betastar betastar
 RUN poetry install --no-dev
-
-ENTRYPOINT ["/bin/sh", "-c", "/usr/bin/xvfb-run -a $@", ""]
-CMD ["betastar", "run"]

@@ -1,0 +1,23 @@
+FROM alpine:3.14
+
+WORKDIR /root
+
+RUN wget -q http://blzdistsc2-a.akamaihd.net/Linux/SC2.4.10.zip \
+    && unzip -P iagreetotheeula ~/SC2.4.10.zip -d ~/ \
+    && rm -fr ~/sc2.zip \
+    && mv ~/StarCraftII/Libs/libstdc++.so.6 ~/StarCraftII/Libs/libstdc++.so.6.temp \
+    && wget -q https://github.com/deepmind/pysc2/releases/download/v1.2/mini_games.zip \
+    && wget -q http://blzdistsc2-a.akamaihd.net/MapPacks/Melee.zip \
+    && wget -q http://blzdistsc2-a.akamaihd.net/MapPacks/Ladder2017Season3.zip \
+    && wget -q http://blzdistsc2-a.akamaihd.net/MapPacks/Ladder2017Season2.zip \
+    && wget -q http://blzdistsc2-a.akamaihd.net/MapPacks/Ladder2017Season1.zip \
+    && unzip -o mini_games.zip -d ~/StarCraftII/Maps/ \
+    && unzip -o -P iagreetotheeula Melee.zip -d ~/StarCraftII/Maps/ \
+    && unzip -o -P iagreetotheeula Ladder2017Season3.zip -d ~/StarCraftII/Maps/ \
+    && unzip -o -P iagreetotheeula Ladder2017Season2.zip -d ~/StarCraftII/Maps/ \
+    && unzip -o -P iagreetotheeula Ladder2017Season1.zip -d ~/StarCraftII/Maps/ \
+    && rm mini_games.zip \
+    && rm Melee.zip \
+    && rm Ladder2017Season3.zip \
+    && rm Ladder2017Season2.zip \
+    && rm Ladder2017Season1.zip
