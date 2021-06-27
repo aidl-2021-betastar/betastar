@@ -313,7 +313,7 @@ class A2C(base_agent.BaseAgent):
 
                             latents = model.encode(screens, minimaps, non_spatials)
                             logits = T.where(
-                                action_masks.bool(), model.actor(latents), T.tensor(-1e8)
+                                action_masks.bool(), model.actor(latents), T.tensor(-1e8).to(device)
                             )
 
                             values = model.critic(latents.detach()).squeeze(dim=1)

@@ -4,6 +4,8 @@ FROM nvidia/cuda:11.0.3-base-ubuntu20.04
 ARG PYTHON_VERSION=3.9.4
 ARG CUDA_VERSION=11.0.3
 
+WORKDIR /root
+
 COPY --from=0 /root/StarCraftII /root/StarCraftII
 
 # Install ubuntu packages
@@ -17,6 +19,8 @@ RUN apt-get update && \
         locales \
         openssh-server \
         vim && \
+        ffmpeg && \
+        xvfb && \
     # Remove the effect of `apt-get update`
     rm -rf /var/lib/apt/lists/* && \
     # Make the "en_US.UTF-8" locale
