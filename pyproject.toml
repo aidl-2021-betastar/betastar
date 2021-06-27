@@ -6,7 +6,7 @@ authors = ["Joan Falcó", "Luis Martin", "Oriol Gual <oriol@gual.me>", "Txus Bac
 
 [tool.poetry.dependencies]
 python = "^3.9.4"
-torch = "1.8.0"
+torch = "1.9.0"
 wandb = "*"
 click = "^7.1.2"
 gym = "^0.18.3"

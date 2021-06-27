@@ -1,9 +1,8 @@
 FROM codegram/sc2:4.10
 
-ARG CUDA_VERSION=11.0.3
-FROM nvidia/cuda:${CUDA_VERSION}-base-ubuntu20.04
+FROM nvidia/cuda:11.0.3-base-ubuntu20.04
 ARG PYTHON_VERSION=3.9.4
-ARG CUDA_VERSION
+ARG CUDA_VERSION=11.0.3
 
 COPY --from=0 /root/StarCraftII /root/StarCraftII
 
@@ -36,7 +35,7 @@ RUN curl -o miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-L
     ./miniconda.sh -b -p conda && \
     rm miniconda.sh && \
     conda/bin/conda install -y python=$PYTHON_VERSION && \
-    conda/bin/conda install -c pytorch pytorch \
+    conda/bin/conda install -c pytorch pytorch && \
     conda/bin/conda clean -ya
 ENV PATH $HOME/conda/bin:$PATH
 RUN touch $HOME/.bashrc && \
