@@ -253,6 +253,7 @@ class A2C(base_agent.BaseAgent):
 
         env = spawn_env(self.config.environment, self.config.game_speed, rank=-1)
         model = ActorCritic(env=env).to(device)
+        wandb.watch(model, log="all")
         model.train()
 
         max_reward = 0
@@ -268,8 +269,6 @@ class A2C(base_agent.BaseAgent):
         opt = Adam(
             model.parameters(), lr=self.config.learning_rate, betas=(0.92, 0.999)
         )
-
-        wandb.watch(model, log="all")
 
         cycles = 0
 
