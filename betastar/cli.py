@@ -47,21 +47,24 @@ def cli():
 )
 @click.option("--reward-decay", default=0.95, help="Gamma hyperparameter")
 @click.option("--episodes", default=4)
+@click.option("--total-steps", default=1000000)
 @click.option("--batch-size", default=32)
-@click.option("--traj-length", default=16)
+@click.option("--unroll-length", default=16)
 @click.option("--gae-lambda", default=0.95)
 @click.option("--use-gae/--no-use-gae", default=True)
+@click.option("--use-ppo/--no-use-ppo", default=False)
+@click.option("--clip-range", default=0.25)
 @click.option("--normalize-advantages/--no-normalize-advantages", default=True)
 @click.option("--normalize-returns/--no-normalize-returns", default=True)
 @click.option("--entropy-coeff", default=0.01, help="Entropy regularisation term")
 @click.option("--critic-coeff", default=0.5, help="Critic regularisation term")
-@click.option("--learning-rate", default=1e-4)
+@click.option("--learning-rate", default=2.5e-4)
 @click.option("--num-workers", default=int(mp.cpu_count()))
 @click.option("--seed", default=42)
 @click.option(
-    "--epochs",
-    default=5,
-    help="Total number of [gather experiences / learn from experiences] cycles",
+    "--update-epochs",
+    default=4,
+    help="Number of times to learn from each experience",
 )
 @click.option(
     "--game-speed",
@@ -77,18 +80,21 @@ def run(
     render_interval: int,
     reward_decay: float,
     episodes: int,
+    total_steps: int,
     batch_size: int,
-    traj_length: int,
+    unroll_length: int,
     gae_lambda: float,
     use_gae: bool,
+    use_ppo: bool,
+    clip_range: float,
     entropy_coeff: float,
     critic_coeff: float,
     learning_rate: float,
     num_workers: int,
     seed: int,
-    epochs: int,
     dryrun: bool,
     game_speed: int,
+    update_epochs: int,
     normalize_advantages: bool,
     normalize_returns: bool,
 ):
@@ -103,16 +109,19 @@ def run(
             "render_interval": render_interval,
             "reward_decay": reward_decay,
             "episodes": episodes,
+            "update_epochs": update_epochs,
+            "total_steps": total_steps,
             "batch_size": batch_size,
-            "traj_length": traj_length,
+            "unroll_length": unroll_length,
             "gae_lambda": gae_lambda,
             "use_gae": use_gae,
+            "use_ppo": use_ppo,
+            "clip_range": clip_range,
             "entropy_coeff": entropy_coeff,
             "critic_coeff": critic_coeff,
             "learning_rate": learning_rate,
             "num_workers": num_workers,
             "seed": seed,
-            "epochs": epochs,
             "environment": environment,
             "game_speed": game_speed,
             "normalize_advantages": normalize_advantages,

@@ -60,33 +60,28 @@ class Episode:
         self.count += 1
 
 
-class EpisodeDataset(Dataset):
-    def __init__(self, episodes: List[Episode]) -> None:
+class UnrollDataset(Dataset):
+    """
+    Flatten episodes into neat (at-most) unroll-size chunks.
+    """
+
+    def __init__(self, episodes: List[Episode], unroll_size: int) -> None:
         super().__init__()
-        self.episodes = episodes
-
-    def __len__(self):
-        return len(self.episodes)
-
-    def __getitem__(self, idx):
-        return self.episodes[idx]
-
-
-class TrajectoryDataset(Dataset):
-    def __init__(self, episodes: List[Episode], traj_size: int = 16) -> None:
-        super().__init__()
-        self.trajectories = []
+        self.unrolls = []
         for e in episodes:
-            idx_chunks = T.arange(0, len(e)).long().split(traj_size)
+            idx_chunks = T.arange(0, len(e)).long().split(unroll_size)
             for chunk in idx_chunks:
-                if len(chunk) == traj_size:
-                    self.trajectories.append(e.lookup(chunk))
+                if len(chunk) == unroll_size:
+                    self.unrolls.append(e.lookup(chunk))
+                else:
+                    # get last len(chunk) elements of episode
+                    self.unrolls.append(e.lookup(list(range(-(len(chunk)), 0))))
 
     def __len__(self):
-        return len(self.trajectories)
+        return len(self.unrolls)
 
     def __getitem__(self, idx):
-        return self.trajectories[idx]
+        return self.unrolls[idx]
 
 
 def collate(batch):

@@ -35,32 +35,40 @@ class ProcEnv(object):
         self.conn.send((START, None))
 
     def step(self, act):
+        assert self.conn
         self.conn.send((STEP, act))
 
     def reset(self):
+        assert self.conn
         self.conn.send((RESET, None))
 
     def stop(self):
+        assert self.conn
         self.conn.send((STOP, None))
 
     def wait(self):
+        assert self.conn
         return self.conn.recv()
 
     def _run(self):
+        assert self.w_conn
         while True:
             msg, data = self.w_conn.recv()
             if msg == START:
                 self._env = spawn_env(
-                    self.environment, self.game_speed, monitor=self.rank == 0
+                    self.environment, self.game_speed, rank=self.rank
                 )
                 self.w_conn.send(DONE)
             elif msg == STEP:
+                assert self._env
                 observation, reward, done, _info = self._env.step(data)
                 self.w_conn.send((observation, reward, done, self._env.action_mask))
             elif msg == RESET:
+                assert self._env
                 observation = self._env.reset()
                 self.w_conn.send((observation, -1, False, self._env.action_mask))
             elif msg == STOP:
+                assert self._env
                 self._env.close()
                 self.w_conn.close()
                 break
@@ -102,6 +110,7 @@ class MultiProcEnv(object):
         for e in self.envs:
             e.stop()
         for e in self.envs:
+            assert e.proc
             e.proc.join()
 
     def wait(self, only=None):

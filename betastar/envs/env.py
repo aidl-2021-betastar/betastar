@@ -32,10 +32,10 @@ class PySC2Env(gym.Env):
     def __init__(
         self,
         action_ids: List[int] = [],
-        spatial_dim=64,
+        spatial_dim=16,
         step_mul=8,
         map_name="MoveToBeacon",
-        visualize=True,
+        rank=0
     ) -> None:
 
         super().__init__()
@@ -43,7 +43,7 @@ class PySC2Env(gym.Env):
         self.spatial_dim = spatial_dim
         self.step_mul = step_mul
         self.map_name = map_name
-        self.visualize = visualize
+        self.visualize = rank==0
 
         # preprocess
         if len(self.action_ids) == 0:
@@ -63,8 +63,8 @@ class PySC2Env(gym.Env):
                     rgb_minimap=None,
                 )
             ],
-            save_replay_episodes=1,
-            replay_dir="/tmp/betastar",
+            save_replay_episodes=1 if rank==0 else 0,
+            replay_dir=f"/tmp/betastar",
             step_mul=self.step_mul,
             players=[sc2_env.Agent(sc2_env.Race.terran)],
         )
@@ -125,9 +125,9 @@ class PySC2Env(gym.Env):
             "select_add",
             "select_point_act",
             "select_unit_act",
-            # 'select_unit_id'
-            "select_worker",
-            "build_queue_id",
+            "select_unit_id"
+            # "select_worker",
+            # "build_queue_id",
             # 'unload_id'
         ]
 
@@ -164,8 +164,8 @@ class PySC2Env(gym.Env):
             "select_point_act": 0,
             "select_unit_act": 0,
             "select_unit_id": 0,
-            "build_queue_id": 0,
-            "unload_id": 0,
+            # "build_queue_id": 0,
+            # "unload_id": 0,
         }
         action_id_idx, args = action[0], []
         action_id = self.action_ids[action_id_idx]
@@ -225,15 +225,15 @@ class PySC2Env(gym.Env):
 
     def render(self, mode="human"):
         if mode == "rgb_array" and self._env._renderer_human is not None:
-            x = self._env._renderer_human._window.copy()
+            x = self._env._renderer_human._window.copy()  # type: ignore
             array = pygame.surfarray.pixels3d(x)
             array = np.transpose(array, axes=(1, 0, 2))
             del x
             return array
 
 
-def spawn_env(environment: str, game_speed: int, monitor=False) -> PySC2Env:
-    env = gym.make(environment, visualize=monitor, step_mul=game_speed)
-    if monitor:
+def spawn_env(environment: str, game_speed: int, rank: int) -> PySC2Env:
+    env = gym.make(environment, rank=rank, step_mul=game_speed)
+    if rank==0:
         env = wrappers.Monitor(env, directory="/tmp/betastar", force=True)
     return env  # type: ignore
