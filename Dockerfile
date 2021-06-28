@@ -18,8 +18,8 @@ RUN apt-get update && \
         sudo \
         locales \
         openssh-server \
-        vim && \
-        ffmpeg && \
+        vim \
+        ffmpeg \
         xvfb && \
     # Remove the effect of `apt-get update`
     rm -rf /var/lib/apt/lists/* && \
