@@ -47,26 +47,27 @@ class Encoder(nn.Module):
             nn.ReLU(),
         )
 
-        self.minimap = nn.Sequential(
-            Scale(1 / 255),
-            nn.Conv2d(minimap_channels, 16, kernel_size=3, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(16, 32, kernel_size=2),
-            nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(32 * conv_out_width * conv_out_width, encoded_size),
-            nn.ReLU(),
-        )
+        # self.minimap = nn.Sequential(
+        #     Scale(1 / 255),
+        #     nn.Conv2d(minimap_channels, 16, kernel_size=3, stride=2),
+        #     nn.ReLU(),
+        #     nn.Conv2d(16, 32, kernel_size=2),
+        #     nn.ReLU(),
+        #     nn.Flatten(),
+        #     nn.Linear(32 * conv_out_width * conv_out_width, encoded_size),
+        #     nn.ReLU(),
+        # )
 
-        self.non_spatial = nn.Sequential(
-            nn.Linear(non_spatial_channels, encoded_size), nn.ReLU()
-        )
+        # self.non_spatial = nn.Sequential(
+        #     nn.Linear(non_spatial_channels, encoded_size), nn.ReLU()
+        # )
 
     def forward(self, screens, minimaps, non_spatials):
         a = self.screen(screens)
-        b = self.minimap(minimaps)
-        c = self.non_spatial(non_spatials)
-        return T.cat([a, b, c]).view(screens.shape[0], -1)
+        #b = self.minimap(minimaps)
+        #c = self.non_spatial(non_spatials)
+        #return T.cat([a, b, c]).view(screens.shape[0], -1)
+        return a.view(screens.shape[0], -1)
 
 
 class ActorCritic(nn.Module):
@@ -88,13 +89,16 @@ class ActorCritic(nn.Module):
             spatial_dim=env.spatial_dim,
         )
 
-        self.backbone = nn.Sequential(
-            nn.Linear(encoded_size * 3, hidden_size), nn.ReLU()
-        )
+        # self.backbone = nn.Sequential(
+        #     nn.Linear(encoded_size * 3, hidden_size), nn.ReLU()
+        # )
 
-        self.actor = nn.Linear(hidden_size, self.action_space.sum())  # type: ignore
+        # self.actor = nn.Linear(encoded_size * 3, self.action_space.sum())  # type: ignore
 
-        self.critic = nn.Linear(hidden_size, 1)
+        # self.critic = nn.Linear(encoded_size * 3, 1)
+        self.actor = nn.Linear(encoded_size, self.action_space.sum())  # type: ignore
+
+        self.critic = nn.Linear(encoded_size, 1)
 
     def forward(
         self, screens, minimaps, non_spatials, action_mask: ActionMask
@@ -103,7 +107,8 @@ class ActorCritic(nn.Module):
         return self.act(latent, action_mask=action_mask), self.critic(latent.detach())
 
     def encode(self, screens, minimaps, non_spatials) -> Tensor:
-        return self.backbone(self.encoder(screens, minimaps, non_spatials))
+        return self.encoder(screens, minimaps, non_spatials)
+        #return self.backbone(self.encoder(screens, minimaps, non_spatials))
 
     def act(self, latent, action_mask: ActionMask) -> Action:
         logits = self._masked_logits(self.actor(latent), action_mask)
@@ -198,12 +203,11 @@ def compute_gae(
     dones: Tensor,
     config: wandb.Config,
 ) -> Tuple[Tensor, Tensor]:
-    rewards.split(config.unroll_length)
     N = len(rewards)
     advantages = T.zeros_like(rewards).float()
     lastgaelam = 0.0
     for t in reversed(range(N)):
-        nextnonterminal = 1.0 - dones[t].item() # type: ignore
+        nextnonterminal = 1.0 - dones[t].item()  # type: ignore
         nextvalues = next_values[t]
 
         delta = (
@@ -214,10 +218,21 @@ def compute_gae(
             + config.reward_decay * config.gae_lambda * nextnonterminal * lastgaelam
         )
     returns = advantages + values
+
+    if config.normalize_advantages:
+        advantages = (advantages - advantages.mean()) / (
+            advantages.std() + np.finfo(np.float32).eps.item()
+        )
+        
     return advantages, returns
 
+
 def compute_gae_batches(
-    rewards: Tensor, values: Tensor, next_values: Tensor, dones: Tensor, config: wandb.Config
+    rewards: Tensor,
+    values: Tensor,
+    next_values: Tensor,
+    dones: Tensor,
+    config: wandb.Config,
 ):
     """
     Computes GAE on a series of unrolls.
@@ -274,7 +289,7 @@ class A2C(base_agent.BaseAgent):
     def run(self):
         device = T.device("cuda" if T.cuda.is_available() else "cpu")  # type: ignore
 
-        env = spawn_env(self.config.environment, self.config.game_speed, rank=-1)
+        env = spawn_env(self.config.environment, self.config.game_speed, spatial_dim=self.config.screen_size, rank=-1)
         model = ActorCritic(env=env).to(device)
         wandb.watch(model, log="all")
         model.train()
@@ -293,6 +308,8 @@ class A2C(base_agent.BaseAgent):
             model.parameters(), lr=self.config.learning_rate, betas=(0.92, 0.999)
         )
 
+        total_cycles = self.config.total_steps // self.config.unroll_length * self.config.num_workers
+
         cycles = 0
 
         self.env.reset()
@@ -300,6 +317,11 @@ class A2C(base_agent.BaseAgent):
         step_n = 0
         with tqdm(range(self.config.total_steps), unit="steps", leave=False) as pbar:
             while step_n < self.config.total_steps:
+                if self.config.anneal_lr:
+                    frac = 1.0 - (cycles - 1.0) / total_cycles
+                    lrnow = frac * self.config.learning_rate
+                    opt.param_groups[0]['lr'] = lrnow
+
                 player.reload_from(model)
 
                 trajectories, trajectory_rewards = self.play(player)
@@ -337,12 +359,16 @@ class A2C(base_agent.BaseAgent):
 
                             latents = model.encode(screens, minimaps, non_spatials)
                             logits = T.where(
-                                action_masks.bool(), model.actor(latents), T.tensor(-1e8).to(device)
+                                action_masks.bool(),
+                                model.actor(latents),
+                                T.tensor(-1e8).to(device),
                             )
 
                             values = model.critic(latents.detach()).squeeze(dim=1)
 
-                            categoricals = model.discrete_categorical_distributions(logits)
+                            categoricals = model.discrete_categorical_distributions(
+                                logits
+                            )
                             log_probs = T.stack(
                                 [
                                     categorical.log_prob(a)
@@ -367,24 +393,29 @@ class A2C(base_agent.BaseAgent):
 
                                 # PPO Clip
                                 # do we want to aggregate first and then calculate a big ratio?
-                                ratio = T.exp(log_probs.sum(dim=1) - old_log_probs.sum(dim=1))
+                                # ratio = T.exp(
+                                #     log_probs.sum(dim=1) - old_log_probs.sum(dim=1)
+                                # )
 
-                                clipped_ratio = ratio.clamp(
-                                    min=1.0 - self.config.clip_range,
-                                    max=1.0 + self.config.clip_range,
-                                )
+                                # clipped_ratio = ratio.clamp(
+                                #     min=1.0 - self.config.clip_range,
+                                #     max=1.0 + self.config.clip_range,
+                                # )
 
                                 # or do we want to calculate ratios to clip independently, and then aggregate?
-                                # ratio = T.exp(log_probs - old_log_probs)
+                                ratio = T.exp(log_probs - old_log_probs)
 
-                                # clipped_ratio = ratio.clamp(min=1.0 - self.config.clip_range,
-                                #                             max=1.0 + self.config.clip_range, dim=1)
+                                clipped_ratio = ratio.clamp(min=1.0 - self.config.clip_range,
+                                                            max=1.0 + self.config.clip_range)
 
-                                # ratio = ratio.sum(dim=1)
-                                # clipped_ratio = clipped_ratio.sum(dim=1
+                                ratio = ratio.sum(dim=1)
+                                clipped_ratio = clipped_ratio.sum(dim=1)
 
                             entropy = T.stack(
-                                [categorical.entropy().mean() for categorical in categoricals]
+                                [
+                                    categorical.entropy().mean()
+                                    for categorical in categoricals
+                                ]
                             ).mean()
 
                             if self.config.use_gae:
@@ -410,7 +441,9 @@ class A2C(base_agent.BaseAgent):
                                 actor_loss = (
                                     -log_probs.sum(dim=1) * advantages.detach()
                                 ).mean()
-                            critic_loss = advantages.pow(2).mean() * self.config.critic_coeff
+                            critic_loss = (
+                                advantages.pow(2).mean() * self.config.critic_coeff
+                            )
                             entropy_loss = entropy * self.config.entropy_coeff
                             loss = actor_loss + critic_loss - entropy_loss
 
@@ -430,6 +463,7 @@ class A2C(base_agent.BaseAgent):
                                 # save model as previous model
                                 previous_model.load_state_dict(model.state_dict())  # type: ignore
 
+                            nn.utils.clip_grad_norm_(model.parameters(), self.config.max_grad_norm)
                             opt.step()
 
                             real_losses.append(loss.item())
@@ -441,30 +475,31 @@ class A2C(base_agent.BaseAgent):
                     "loss/real": np.array(real_losses).mean(),
                     "loss/actor": np.array(actor_losses).mean(),
                     "loss/critic": np.array(critic_losses).mean(),
-                    "loss/entropy": np.array(entropies).mean()
+                    "loss/entropy": np.array(entropies).mean(),
                 }
-                if cycles % 100 == 0 or step_n > self.config.total_steps:
+                if (
+                    cycles % self.config.test_interval == 0
+                    or step_n > self.config.total_steps
+                ):
                     player.reload_from(model)
                     test_rewards = self.test(player, episodes=5)
 
                     _max_reward = np.array(test_rewards).max()
-                    metrics['episode_reward/mean'] = np.array(test_rewards).mean()
-                    metrics['episode_reward/max'] = _max_reward
+                    metrics["episode_reward/mean"] = np.array(test_rewards).mean()
+                    metrics["episode_reward/max"] = _max_reward
 
                     if _max_reward > max_reward:
                         wandb.run.summary["episode_reward/max"] = _max_reward
                         max_reward = _max_reward
 
-                    metrics['video'] = self.last_video(step_n)
+                    metrics["video"] = self.last_video(step_n)
                     wandb.log_artifact(
-                        self.last_replay(map_name=self.config.environment, step_n=step_n)
+                        self.last_replay(
+                            map_name=self.config.environment, step_n=step_n
+                        )
                     )
 
-                wandb.log(
-                    metrics,
-                    step=step_n,
-                    commit=True
-                )
+                wandb.log(metrics, step=step_n, commit=True)
 
                 cycles += 1
 
@@ -474,3 +509,4 @@ class A2C(base_agent.BaseAgent):
 
         wandb.finish()
         self.env.stop()
+        self.test_env.stop()

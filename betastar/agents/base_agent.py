@@ -16,6 +16,7 @@ class BaseAgent(object):
         self.env = MultiProcEnv(
             self.config.environment,
             self.config.game_speed,
+            self.config.screen_size,
             count=self.config.num_workers,
         )
         self.env.start()
@@ -23,8 +24,10 @@ class BaseAgent(object):
         self.test_env = MultiProcEnv(
             self.config.environment,
             self.config.game_speed,
+            self.config.screen_size,
             count=1
         )
+        self.test_env.start()
 
     def last_video(self, step: int) -> wandb.Video:
         videos = list(Path("/tmp/betastar").glob("*.mp4"))
@@ -65,7 +68,7 @@ class BaseAgent(object):
                     rewards_,
                     dones,
                     action_mask,
-                ) = self.env.step(actions)
+                ) = self.test_env.step(actions)
 
                 ep_reward += rewards_[0].item()
 

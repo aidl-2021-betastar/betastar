@@ -6,9 +6,11 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 import wandb
+from pyvirtualdisplay import Display
 
 from betastar.agents.a2c import A2C
 from betastar.agents.random_agent import RandomAgent
+
 
 @click.group()
 def cli():
@@ -49,22 +51,34 @@ def cli():
 @click.option("--episodes", default=4)
 @click.option("--total-steps", default=1000000)
 @click.option("--batch-size", default=32)
-@click.option("--unroll-length", default=16)
+@click.option("--unroll-length", default=60)
 @click.option("--gae-lambda", default=0.95)
 @click.option("--use-gae/--no-use-gae", default=True)
 @click.option("--use-ppo/--no-use-ppo", default=False)
-@click.option("--clip-range", default=0.25)
+@click.option("--clip-range", default=0.1)
 @click.option("--normalize-advantages/--no-normalize-advantages", default=True)
 @click.option("--normalize-returns/--no-normalize-returns", default=True)
+@click.option("--anneal-lr/--no-anneal-lr", default=False)
 @click.option("--entropy-coeff", default=0.01, help="Entropy regularisation term")
 @click.option("--critic-coeff", default=0.5, help="Critic regularisation term")
 @click.option("--learning-rate", default=2.5e-4)
+@click.option("--max-grad-norm", default=0.5)
+@click.option(
+    "--test-interval",
+    default=100,
+    help="Play/learn cycles to wait before running a test round",
+)
 @click.option("--num-workers", default=int(mp.cpu_count()))
 @click.option("--seed", default=42)
 @click.option(
     "--update-epochs",
     default=4,
     help="Number of times to learn from each experience",
+)
+@click.option(
+    "--screen-size",
+    default=16,
+    help="Play in a ?x? screen",
 )
 @click.option(
     "--game-speed",
@@ -91,12 +105,16 @@ def run(
     critic_coeff: float,
     learning_rate: float,
     num_workers: int,
+    test_interval: int,
     seed: int,
     dryrun: bool,
     game_speed: int,
     update_epochs: int,
+    max_grad_norm: float,
+    screen_size: int,
     normalize_advantages: bool,
     normalize_returns: bool,
+    anneal_lr: bool
 ):
     if dryrun or agent == "random":
         os.environ["WANDB_MODE"] = "dryrun"
@@ -124,8 +142,12 @@ def run(
             "seed": seed,
             "environment": environment,
             "game_speed": game_speed,
+            "test_interval": test_interval,
+            "max_grad_norm": max_grad_norm,
+            "screen_size": screen_size,
             "normalize_advantages": normalize_advantages,
             "normalize_returns": normalize_returns,
+            "anneal_lr": anneal_lr
         },
         monitor_gym=False,
     )
@@ -136,7 +158,13 @@ def run(
     np.random.seed(config.seed)
     torch.manual_seed(config.seed)
 
+    display = Display(visible=0, size=(800, 600))
+    display.start()
+
     if agent == "random":
         RandomAgent(config).run()
     elif agent == "a2c":
         A2C(config).run()
+
+    display.stop()
+    

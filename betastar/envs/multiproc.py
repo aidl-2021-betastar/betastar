@@ -21,10 +21,11 @@ class ProcEnv(object):
     w_conn: Optional[Connection]
     proc: Optional[Process]
 
-    def __init__(self, environment: str, game_speed: int, rank: int, monitor=False) -> None:
+    def __init__(self, environment: str, game_speed: int, spatial_dim: int, rank: int, monitor=False) -> None:
         super(ProcEnv).__init__()
         self.environment = environment
         self.game_speed = game_speed
+        self.spatial_dim = spatial_dim
         self.rank = rank
         self.monitor = monitor
         self._env = self.conn = self.w_conn = self.proc = None
@@ -57,7 +58,7 @@ class ProcEnv(object):
             msg, data = self.w_conn.recv()
             if msg == START:
                 self._env = spawn_env(
-                    self.environment, self.game_speed, rank=self.rank, monitor=self.monitor
+                    self.environment, self.game_speed, spatial_dim=self.spatial_dim, rank=self.rank, monitor=self.monitor
                 )
                 self.w_conn.send(DONE)
             elif msg == STEP:
@@ -76,9 +77,9 @@ class ProcEnv(object):
 
 
 class MultiProcEnv(object):
-    def __init__(self, environment: str, game_speed: int, count: int, monitor=False):
+    def __init__(self, environment: str, game_speed: int, spatial_dim: int, count: int, monitor=False):
         super(MultiProcEnv).__init__()
-        self.envs = [ProcEnv(environment, game_speed, rank, monitor=True) for rank in range(count)]
+        self.envs = [ProcEnv(environment, game_speed, spatial_dim, rank, monitor=rank==0) for rank in range(count)]
         self.last_observed = None
 
     def start(self):
