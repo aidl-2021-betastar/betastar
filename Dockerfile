@@ -8,6 +8,10 @@ WORKDIR /root
 
 COPY --from=0 /root/StarCraftII /root/StarCraftII
 
+# Setup timezone
+ENV TZ=Europe/Madrid
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 # Install ubuntu packages
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -27,10 +31,6 @@ RUN apt-get update && \
     localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 ENV LANG en_US.utf8
 
-# Setup timezone
-ENV TZ=Europe/Madrid
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
 # Install miniconda (python)
 # Referenced PyTorch's Dockerfile:
 #   https://github.com/pytorch/pytorch/blob/master/docker/pytorch/Dockerfile
@@ -47,9 +47,9 @@ RUN touch $HOME/.bashrc && \
 
 ENV POETRY_VIRTUALENVS_CREATE=false
 
-RUN pip install 'poetry==1.1.5'
+RUN $HOME/conda/bin/pip install 'poetry==1.1.5'
 
 ADD pyproject.toml .
 ADD poetry.lock .
 ADD betastar betastar
-RUN poetry install --no-dev
+RUN $HOME/conda/bin/poetry install --no-dev
