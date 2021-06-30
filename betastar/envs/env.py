@@ -190,14 +190,25 @@ class PySC2Env(gym.Env):
         response = self._env.reset()[0]
         return self._format_observation(response.observation)
 
+    @property
+    def action_space_length(self) -> int:
+        if self.action_space.__class__ is spaces.MultiDiscrete:
+            return self.action_space.nvec.sum() # type: ignore
+        else:
+            return self.spatial_dim * self.spatial_dim # figure out self.action_space
+
     def _format_observation(self, raw_obs) -> Observation:
         # action masking
-        action_id_mask = np.zeros(len(self.action_ids))
-        for available_action_id in raw_obs["available_actions"]:
-            if available_action_id in self.reverse_action_ids:
-                action_id_mask[self.reverse_action_ids[available_action_id]] = 1
-        self.action_mask = np.ones(self.action_space.nvec.sum())  # type: ignore
-        self.action_mask[: len(self.action_ids)] = action_id_mask
+        if self.action_space_length > 1: # multidiscrete
+            action_id_mask = np.zeros(len(self.action_ids))
+            for available_action_id in raw_obs["available_actions"]:
+                if available_action_id in self.reverse_action_ids:
+                    action_id_mask[self.reverse_action_ids[available_action_id]] = 1
+            self.action_mask = np.ones(self.action_space_length)  # type: ignore
+            self.action_mask[: len(self.action_ids)] = action_id_mask
+        else:
+            self.action_mask = np.ones(self.action_space_length)  # type: ignore
+
         self.available_actions = raw_obs["available_actions"]
 
         screen = T.from_numpy(

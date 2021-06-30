@@ -1,5 +1,6 @@
 from typing import List, Tuple
 
+from gym import spaces
 import numpy as np
 import torch as T
 import wandb
@@ -79,7 +80,11 @@ class ActorCritic(nn.Module):
         minimap_channels: int = env.feature_original_shapes[1][0]  # type: ignore
         non_spatial_channels: int = env.feature_original_shapes[2][0]  # type: ignore
 
-        self.action_space = env.action_space.nvec.copy()  # type: ignore
+
+        if env.action_space.__class__ == spaces.Discrete:
+            self.discrete_action_space = True
+        else:
+            self.action_space = env.action_space.nvec.copy()  # type: ignore
 
         self.encoder = Encoder(
             encoded_size=encoded_size,
@@ -96,7 +101,7 @@ class ActorCritic(nn.Module):
         # self.actor = nn.Linear(encoded_size * 3, self.action_space.sum())  # type: ignore
 
         # self.critic = nn.Linear(encoded_size * 3, 1)
-        self.actor = nn.Linear(encoded_size, self.action_space.sum())  # type: ignore
+        self.actor = nn.Linear(encoded_size, env.action_space_length)  # type: ignore
 
         self.critic = nn.Linear(encoded_size, 1)
 
@@ -129,7 +134,10 @@ class ActorCritic(nn.Module):
         categorical distributions (actions, screen coordinates, minimap coordinates, etc...).
         Returns a Categorical object for each of those.
         """
-        split_logits = T.split(logits, self.action_space.tolist(), dim=1)  # type: ignore
+        if self.discrete_action_space:
+            split_logits = [logits]
+        else:
+            split_logits = T.split(logits, self.action_space.tolist(), dim=1)  # type: ignore
         return [Categorical(logits=logits) for logits in split_logits]
 
 

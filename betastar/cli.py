@@ -159,13 +159,13 @@ def run(
     np.random.seed(config.seed)
     torch.manual_seed(config.seed)
 
-    display = Display(visible=0, size=(800, 600))
-    display.start()
+    #display = Display(visible=0, size=(800, 600))
+    #display.start()
 
     if agent == "random":
         RandomAgent(config).run()
     elif agent == "a2c":
         A2C(config).run()
 
-    display.stop()
+    #display.stop()
     
