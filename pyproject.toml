@@ -12,6 +12,7 @@ click = "^7.1.2"
 gym = "^0.18.3"
 tqdm = "^4.60.0"
 PySC2 = "^3.0.0"
+PyVirtualDisplay = "^2.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

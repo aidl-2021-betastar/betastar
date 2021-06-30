@@ -31,6 +31,7 @@ def cli():
         [
             "SC2Game-v0",
             "SC2MoveToBeacon-v0",
+            "SC2MoveToBeaconSimple-v0",
             "SC2MoveToBeacon-v1",
             "SC2CollectMineralShards-v0",
             "SC2CollectMineralShards-v1",
