@@ -487,7 +487,8 @@ class A2C(base_agent.BaseAgent):
                     "loss/entropy": np.array(entropies).mean(),
                 }
                 if (
-                    cycles % self.config.test_interval == 0
+                    (cycles > 0 and
+                     cycles % self.config.test_interval == 0)
                     or step_n > self.config.total_steps
                 ):
                     player.reload_from(model)

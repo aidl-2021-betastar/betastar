@@ -3,8 +3,9 @@ from absl import flags
 FLAGS = flags.FLAGS
 FLAGS([__file__])
 
-from multiprocessing import Pipe, Process
+import multiprocessing as mp
 from multiprocessing.connection import Connection
+from multiprocessing.context import SpawnContext, SpawnProcess
 from typing import Optional
 
 import torch as T
@@ -14,15 +15,17 @@ START, STEP, RESET, STOP, DONE = range(5)
 
 
 class ProcEnv(object):
+    ctx: SpawnContext
     environment: str
     game_speed: int
     _env: Optional[PySC2Env]
     conn: Optional[Connection]
     w_conn: Optional[Connection]
-    proc: Optional[Process]
+    proc: Optional[SpawnProcess]
 
-    def __init__(self, environment: str, game_speed: int, spatial_dim: int, rank: int, monitor=False) -> None:
+    def __init__(self, context: SpawnContext, environment: str, game_speed: int, spatial_dim: int, rank: int, monitor=False) -> None:
         super(ProcEnv).__init__()
+        self.ctx = context
         self.environment = environment
         self.game_speed = game_speed
         self.spatial_dim = spatial_dim
@@ -31,8 +34,8 @@ class ProcEnv(object):
         self._env = self.conn = self.w_conn = self.proc = None
 
     def start(self):
-        self.conn, self.w_conn = Pipe()
-        self.proc = Process(target=self._run)
+        self.conn, self.w_conn = self.ctx.Pipe()
+        self.proc = self.ctx.Process(target=self._run)
         self.proc.start()
         self.conn.send((START, None))
 
@@ -79,7 +82,8 @@ class ProcEnv(object):
 class MultiProcEnv(object):
     def __init__(self, environment: str, game_speed: int, spatial_dim: int, count: int, monitor=False):
         super(MultiProcEnv).__init__()
-        self.envs = [ProcEnv(environment, game_speed, spatial_dim, rank, monitor=rank==0) for rank in range(count)]
+        self.ctx = mp.get_context('spawn')
+        self.envs = [ProcEnv(self.ctx, environment, game_speed, spatial_dim, rank, monitor=rank==0) for rank in range(count)]
         self.last_observed = None
 
     def start(self):

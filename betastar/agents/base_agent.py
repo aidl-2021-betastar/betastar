@@ -86,7 +86,7 @@ class BaseAgent(object):
         if reset:
             screen, minimap, non_spatial, _reward, _done, action_mask = self.env.reset()
         else:
-            screen, minimap, non_spatial, _reward, _done, action_mask = self.env.last_observation
+            screen, minimap, non_spatial, _reward, done, action_mask = self.env.last_observation
 
         trajectories = [Trajectory() for n in range(self.config.num_workers)]
         trajectory_rewards = [0 for n in range(self.config.num_workers)]
