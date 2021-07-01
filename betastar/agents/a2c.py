@@ -84,6 +84,7 @@ class ActorCritic(nn.Module):
         if env.action_space.__class__ == spaces.Discrete:
             self.discrete_action_space = True
         else:
+            self.discrete_action_space = False
             self.action_space = env.action_space.nvec.copy()  # type: ignore
 
         self.encoder = Encoder(
