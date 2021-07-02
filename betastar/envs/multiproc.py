@@ -67,6 +67,8 @@ class ProcEnv(object):
             elif msg == STEP:
                 assert self._env
                 observation, reward, done, _info = self._env.step(data)
+                if done:
+                    observation = self._env.reset()
                 self.w_conn.send((observation, reward, done, self._env.action_mask))
             elif msg == RESET:
                 assert self._env
@@ -84,7 +86,6 @@ class MultiProcEnv(object):
         super(MultiProcEnv).__init__()
         self.ctx = mp.get_context('spawn')
         self.envs = [ProcEnv(self.ctx, environment, game_speed, spatial_dim, rank, monitor=rank==0) for rank in range(count)]
-        self.last_observed = None
 
     def start(self):
         for env in self.envs:

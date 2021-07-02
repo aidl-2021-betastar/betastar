@@ -21,13 +21,13 @@ class BaseAgent(object):
         )
         self.env.start()
 
-        self.test_env = MultiProcEnv(
-            self.config.environment,
-            self.config.game_speed,
-            self.config.screen_size,
-            count=1
-        )
-        self.test_env.start()
+        # self.test_env = MultiProcEnv(
+        #     self.config.environment,
+        #     self.config.game_speed,
+        #     self.config.screen_size,
+        #     count=1
+        # )
+        #self.test_env.start()
 
     def last_video(self, step: int) -> wandb.Video:
         videos = list(Path("/tmp/betastar").glob("*.mp4"))

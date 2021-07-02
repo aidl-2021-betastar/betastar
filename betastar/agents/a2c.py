@@ -3,6 +3,7 @@ from typing import List, Tuple
 from gym import spaces
 import numpy as np
 import torch as T
+import torch
 import wandb
 from betastar.agents import base_agent
 from betastar.data import Trajectory, UnrollDataset, collate
@@ -22,6 +23,87 @@ class Scale(nn.Module):
 
     def forward(self, x):
         return x * self.scale
+
+class ScreenNet(torch.nn.Module):
+    """ Model for movement based mini games in sc2.
+    This network only takes screen input and only returns spatial outputs.
+    Some of the example min games are MoveToBeacon and CollectMineralShards.
+    Arguments:
+        - in_channel: Number of feature layers in the screen input
+        - screen_size: Screen size of the mini game. If 64 is given output
+            size will be 64*64
+    Note that output size depends on screen_size.
+    """
+    class ResidualConv(torch.nn.Module):
+        def __init__(self, in_channel, **kwargs):
+            super().__init__()
+            assert kwargs["out_channels"] == in_channel, ("input channel must"
+                                                          "be the same as out"
+                                                          " channels")
+            self.block = torch.nn.Sequential(
+                torch.nn.Conv2d(**kwargs),
+                torch.nn.InstanceNorm2d(in_channel),
+                torch.nn.ReLU(),
+                torch.nn.Conv2d(**kwargs),
+                torch.nn.InstanceNorm2d(in_channel),
+                torch.nn.ReLU(),
+            )
+
+        def forward(self, x):
+            res_x = self.block(x)
+            return res_x + x
+
+    def __init__(self, in_channel, screen_size):
+        super().__init__()
+        res_kwargs = {
+            "in_channels": 32,
+            "out_channels": 32,
+            "kernel_size": 3,
+            "stride": 1,
+            "padding": 1,
+        }
+        self.convnet = torch.nn.Sequential(
+            torch.nn.Conv2d(in_channel, 32, 3, 1, padding=1),
+            self.ResidualConv(32, **res_kwargs),
+            self.ResidualConv(32, **res_kwargs),
+            self.ResidualConv(32, **res_kwargs),
+            self.ResidualConv(32, **res_kwargs)
+        )
+
+        self.policy = torch.nn.Sequential(
+            torch.nn.Linear(32*screen_size*screen_size, 256),
+            torch.nn.LayerNorm(256),
+            torch.nn.ReLU(),
+            torch.nn.Linear(256, 2*screen_size)
+        )
+
+        self.value = torch.nn.Sequential(
+            torch.nn.Linear(32*screen_size*screen_size, 256),
+            torch.nn.ReLU(),
+            torch.nn.Linear(256, 1)
+        )
+
+        self.screen_size = screen_size
+        gain = torch.nn.init.calculate_gain("relu")
+
+        def param_init(module):
+            if isinstance(module, torch.nn.Linear):
+                torch.nn.init.xavier_normal_(module.weight, gain)
+                torch.nn.init.zeros_(module.bias)
+            if isinstance(module, torch.nn.Conv2d):
+                torch.nn.init.dirac_(module.weight)
+                torch.nn.init.zeros_(module.bias) # type: ignore
+        self.apply(param_init)
+
+    def forward(self, state):
+        encode = self.convnet(state)
+        encode = encode.reshape(encode.shape[0], -1)
+
+        value = self.value(encode)
+
+        logits = self.policy(encode)
+
+        return logits.split(self.screen_size, dim=-1), value
 
 
 class Encoder(nn.Module):
@@ -286,6 +368,25 @@ class A2CPlayer(Player):
         self.model.eval()
 
 
+class MultiCategorical:
+    def __init__(self, *logits):
+        self.dists = [Categorical(logits=logit)
+                      for logit in logits]
+
+    def sample(self):
+        return [dist.sample() for dist in self.dists]
+
+    def log_prob(self, *acts):
+        return sum(dist.log_prob(act) for act, dist in zip(acts, self.dists))
+
+    def entropy(self):
+        return sum(dist.entropy() for dist in self.dists)
+
+    @property
+    def greedy_action(self):
+        return [torch.argmax(dist.logits, dim=-1) for dist in self.dists]
+
+
 class A2C(base_agent.BaseAgent):
     def dataloader(self, trajectories: List[Trajectory]) -> DataLoader:
         return DataLoader(
@@ -297,19 +398,21 @@ class A2C(base_agent.BaseAgent):
 
     def run(self):
         device = T.device("cuda" if T.cuda.is_available() else "cpu")  # type: ignore
+        cpu = T.device("cpu")  # type: ignore
 
         env = spawn_env(self.config.environment, self.config.game_speed, spatial_dim=self.config.screen_size, rank=-1)
-        model = ActorCritic(env=env).to(device)
+        #model = ActorCritic(env=env).to(device)
+        model = ScreenNet(env.feature_original_shapes[0][0], env.spatial_dim).to(device)
         wandb.watch(model, log="all")
-        model.train()
 
         max_reward = 0
 
-        if self.config.use_ppo:
-            previous_model = ActorCritic(env=env).to(device)
-            previous_model.load_state_dict(model.state_dict())  # type: ignore
+        # if self.config.use_ppo:
+        #     previous_model = ScreenNet(env.feature_original_shapes[0][0], self.config.screen_size).to(device)
+        #     #previous_model = ActorCritic(env=env).to(device)
+        #     previous_model.load_state_dict(model.state_dict())  # type: ignore
 
-        player = A2CPlayer(ActorCritic(env=env))
+        #player = A2CPlayer(ActorCritic(env=env))
 
         env.close()
 
@@ -321,202 +424,307 @@ class A2C(base_agent.BaseAgent):
 
         cycles = 0
 
-        self.env.reset()
+        # set up environment
+        screen, minimap, non_spatial, _reward, _done, action_mask = self.env.reset()
+        screen = screen.to(device)
+
+        eps_rewards = np.zeros((self.config.num_workers, 1))
+        reward_list = [0]
 
         step_n = 0
-        with tqdm(range(self.config.total_steps), unit="steps", leave=False) as pbar:
+        with tqdm(range(self.config.total_steps), unit="steps", leave=True) as pbar:
             while step_n < self.config.total_steps:
-                if self.config.anneal_lr:
-                    frac = 1.0 - (cycles - 1.0) / total_cycles
-                    lrnow = frac * self.config.learning_rate
-                    opt.param_groups[0]['lr'] = lrnow
+                # if self.config.anneal_lr:
+                #     frac = 1.0 - (cycles - 1.0) / total_cycles
+                #     lrnow = frac * self.config.learning_rate
+                #     opt.param_groups[0]['lr'] = lrnow
 
-                player.reload_from(model)
+                #player.reload_from(model)
 
-                trajectories, trajectory_rewards = self.play(player)
+                # play
+                transitions = []
 
-                real_losses = []
-                actor_losses = []
-                critic_losses = []
-                entropies = []
+                for i in tqdm(range(self.config.unroll_length), unit="steps", leave=False):
+                    logits, value = model(screen)
+                    dist = MultiCategorical(*logits)
+                    action = dist.sample()
+                    log_prob = dist.log_prob(*action)
+                    entropy = dist.entropy()
+                    action = action[0]*self.config.screen_size + action[1]
 
-                for _update_epoch in tqdm(
-                    range(self.config.update_epochs), unit="epochs", leave=False
-                ):
-                    with tqdm(
-                        self.dataloader(trajectories), unit="batches", leave=False
-                    ) as batches:
-                        for (
-                            screens,
-                            minimaps,
-                            non_spatials,
-                            actions,
-                            rewards,
-                            _values,
-                            next_values,
-                            action_masks,
-                            dones,
-                        ) in batches:
-                            screens = screens.to(device)
-                            minimaps = minimaps.to(device)
-                            non_spatials = non_spatials.to(device)
-                            actions = actions.to(device)
-                            rewards = rewards.to(device)
-                            next_values = next_values.to(device)
-                            action_masks = action_masks.to(device)
-                            dones = dones.to(device)
+                    screen, _minimap, _non_spatial, reward, done, _action_mask = self.env.step(action.detach().to(cpu))
+                    screen = screen.to(device)
 
-                            latents = model.encode(screens, minimaps, non_spatials)
-                            logits = T.where(
-                                action_masks.bool(),
-                                model.actor(latents),
-                                T.tensor(-1e8).to(device),
-                            )
+                    with torch.no_grad():
+                        _, next_value, = model(screen)
 
-                            values = model.critic(latents.detach()).squeeze(dim=1)
+                    transitions.append((reward, done, log_prob, value.squeeze(), next_value.squeeze(), entropy))
 
-                            categoricals = model.discrete_categorical_distributions(
-                                logits
-                            )
-                            log_probs = T.stack(
-                                [
-                                    categorical.log_prob(a)
-                                    for a, categorical in zip(
-                                        actions.transpose(0, 1), categoricals
-                                    )
-                                ],
-                                dim=1,
-                            )
+                    for j, d in enumerate(done.flatten()):
+                        eps_rewards[j] += reward[j].item()
+                        if d == 1:
+                            reward_list.append(eps_rewards[j].item())
+                            eps_rewards[j] = 0
+                
+                # learn!
+                # all things are whatever x batch_size
+                rewards = T.stack([x[0] for x in transitions]).to(device)
+                dones = T.stack([x[1] for x in transitions]).to(device)
+                log_probs = T.stack([x[2] for x in transitions]).to(device)
+                values = T.stack([x[3] for x in transitions]).to(device)
+                next_values = T.stack([x[4] for x in transitions]).to(device)
+                entropies = T.stack([x[5] for x in transitions]).to(device)
 
-                            if self.config.use_ppo:
-                                old_categoricals = previous_model.discrete_categorical_distributions(logits)  # type: ignore
-                                old_log_probs = T.stack(
-                                    [
-                                        categorical.log_prob(a)
-                                        for a, categorical in zip(
-                                            actions.transpose(0, 1), old_categoricals
-                                        )
-                                    ],
-                                    dim=1,
-                                )
+                R = next_values[-1]
+                advs = []
+                for i in reversed(range(len(values))):
+                    R = R * (1-dones[i].long()) * self.config.reward_decay + rewards[i]
+                    advs.append(R - values[i])
+                advantages = T.stack(advs).to(device)
+                
+                value_loss = advantages.pow(2).mean() * self.config.critic_coeff
+                policy_loss = (-log_probs * advantages.detach()).mean()
+                entropy_loss = entropies.mean() * self.config.entropy_coeff
 
-                                # PPO Clip
-                                # do we want to aggregate first and then calculate a big ratio?
-                                # ratio = T.exp(
-                                #     log_probs.sum(dim=1) - old_log_probs.sum(dim=1)
-                                # )
-
-                                # clipped_ratio = ratio.clamp(
-                                #     min=1.0 - self.config.clip_range,
-                                #     max=1.0 + self.config.clip_range,
-                                # )
-
-                                # or do we want to calculate ratios to clip independently, and then aggregate?
-                                ratio = T.exp(log_probs - old_log_probs)
-
-                                clipped_ratio = ratio.clamp(min=1.0 - self.config.clip_range,
-                                                            max=1.0 + self.config.clip_range)
-
-                                ratio = ratio.sum(dim=1)
-                                clipped_ratio = clipped_ratio.sum(dim=1)
-
-                            entropy = T.stack(
-                                [
-                                    categorical.entropy().mean()
-                                    for categorical in categoricals
-                                ]
-                            ).mean()
-
-                            if self.config.use_gae:
-                                advantages, returns = compute_gae_batches(
-                                    rewards, values, next_values, dones, self.config
-                                )
-                            else:
-                                returns = compute_returns(
-                                    rewards,
-                                    next_values,
-                                    dones,
-                                    self.config,
-                                )
-                                advantages = returns - values
-
-                            if self.config.use_ppo:
-                                actor_loss = T.min(
-                                    ratio * advantages.detach(),  # type: ignore
-                                    clipped_ratio * advantages.detach(),  # type: ignore
-                                )  # type: ignore
-                                actor_loss = (-actor_loss).mean()  # type: ignore
-                            else:
-                                actor_loss = (
-                                    -log_probs.sum(dim=1) * advantages.detach()
-                                ).mean()
-                            critic_loss = (
-                                advantages.pow(2).mean() * self.config.critic_coeff
-                            )
-                            entropy_loss = entropy * self.config.entropy_coeff
-                            loss = actor_loss + critic_loss - entropy_loss
-
-                            batches.set_postfix(
-                                {
-                                    "loss": loss.item(),
-                                    "al": actor_loss.item(),
-                                    "cl": critic_loss.item(),
-                                    "ent": entropy_loss.item(),
-                                }
-                            )
-
-                            opt.zero_grad()
-                            loss.backward()
-
-                            if self.config.use_ppo:
-                                # save model as previous model
-                                previous_model.load_state_dict(model.state_dict())  # type: ignore
-
-                            nn.utils.clip_grad_norm_(model.parameters(), self.config.max_grad_norm)
-                            opt.step()
-
-                            real_losses.append(loss.item())
-                            actor_losses.append(actor_loss.item())
-                            critic_losses.append(critic_loss.item())
-                            entropies.append(entropy_loss.item())
+                opt.zero_grad()
+                loss = value_loss + policy_loss - entropy_loss
+                loss.backward()
+                opt.step()
 
                 metrics = {
-                    "loss/real": np.array(real_losses).mean(),
-                    "loss/actor": np.array(actor_losses).mean(),
-                    "loss/critic": np.array(critic_losses).mean(),
-                    "loss/entropy": np.array(entropies).mean(),
+                    'episode_reward/last10/mean': np.mean(reward_list[-10:]),
+                    'episode_reward/last10/max': np.max(reward_list[-10:]),
+                    'episode_reward/last50/mean': np.mean(reward_list[-50:]),
+                    'episode_reward/last50/max': np.max(reward_list[-50:]),
+                    'loss/real': loss.item(),
+                    'loss/actor': policy_loss.mean().item(),
+                    'loss/critic': value_loss.mean().item(),
+                    'loss/entropy': entropies.mean()
                 }
-                if (
-                    (cycles > 0 and
-                     cycles % self.config.test_interval == 0)
-                    or step_n > self.config.total_steps
-                ):
-                    player.reload_from(model)
-                    test_rewards = self.test(player, episodes=5)
 
-                    _max_reward = np.array(test_rewards).max()
-                    metrics["episode_reward/mean"] = np.array(test_rewards).mean()
-                    metrics["episode_reward/max"] = _max_reward
+                _max_reward = np.mean(reward_list).max()
 
-                    if _max_reward > max_reward:
-                        wandb.run.summary["episode_reward/max"] = _max_reward
-                        max_reward = _max_reward
+                if _max_reward > max_reward:
+                    wandb.run.summary["episode_reward/max"] = _max_reward
+                    max_reward = _max_reward
 
-                    metrics["video"] = self.last_video(step_n)
-                    wandb.log_artifact(
-                        self.last_replay(
-                            map_name=self.config.environment, step_n=step_n
-                        )
-                    )
+                # if (
+                #     (cycles > 0 and
+                #      cycles % self.config.test_interval == 0)
+                #     or step_n > self.config.total_steps
+                # ):
+                #     player.reload_from(model)
+                #     test_rewards = self.test(player, episodes=5)
+
+                #     _max_reward = np.array(test_rewards).max()
+                #     metrics["episode_reward/mean"] = np.array(test_rewards).mean()
+                #     metrics["episode_reward/max"] = _max_reward
+
+                #     if _max_reward > max_reward:
+                #         wandb.run.summary["episode_reward/max"] = _max_reward
+                #         max_reward = _max_reward
+
+                #     metrics["video"] = self.last_video(step_n)
+                #     wandb.log_artifact(
+                #         self.last_replay(
+                #             map_name=self.config.environment, step_n=step_n
+                #         )
+                #     )
 
                 wandb.log(metrics, step=step_n, commit=True)
 
                 cycles += 1
 
-                _played_steps = sum([len(e) for e in trajectories])
+                _played_steps = self.config.unroll_length * self.config.num_workers
                 pbar.update(_played_steps)
                 step_n += _played_steps
 
+
+
+                # trajectories, trajectory_rewards = self.play(player)
+
+                # real_losses = []
+                # actor_losses = []
+                # critic_losses = []
+                # entropies = []
+
+                # for _update_epoch in tqdm(
+                #     range(self.config.update_epochs), unit="epochs", leave=False
+                # ):
+                #     with tqdm(
+                #         self.dataloader(trajectories), unit="batches", leave=False
+                #     ) as batches:
+                #         for (
+                #             screens,
+                #             minimaps,
+                #             non_spatials,
+                #             actions,
+                #             rewards,
+                #             _values,
+                #             next_values,
+                #             action_masks,
+                #             dones,
+                #         ) in batches:
+                #             screens = screens.to(device)
+                #             minimaps = minimaps.to(device)
+                #             non_spatials = non_spatials.to(device)
+                #             actions = actions.to(device)
+                #             rewards = rewards.to(device)
+                #             next_values = next_values.to(device)
+                #             action_masks = action_masks.to(device)
+                #             dones = dones.to(device)
+
+                #             latents = model.encode(screens, minimaps, non_spatials)
+                #             logits = T.where(
+                #                 action_masks.bool(),
+                #                 model.actor(latents),
+                #                 T.tensor(-1e8).to(device),
+                #             )
+
+                #             values = model.critic(latents.detach()).squeeze(dim=1)
+
+                #             categoricals = model.discrete_categorical_distributions(
+                #                 logits
+                #             )
+                #             log_probs = T.stack(
+                #                 [
+                #                     categorical.log_prob(a)
+                #                     for a, categorical in zip(
+                #                         actions.transpose(0, 1), categoricals
+                #                     )
+                #                 ],
+                #                 dim=1,
+                #             )
+
+                #             if self.config.use_ppo:
+                #                 old_categoricals = previous_model.discrete_categorical_distributions(logits)  # type: ignore
+                #                 old_log_probs = T.stack(
+                #                     [
+                #                         categorical.log_prob(a)
+                #                         for a, categorical in zip(
+                #                             actions.transpose(0, 1), old_categoricals
+                #                         )
+                #                     ],
+                #                     dim=1,
+                #                 )
+
+                #                 # PPO Clip
+                #                 # do we want to aggregate first and then calculate a big ratio?
+                #                 # ratio = T.exp(
+                #                 #     log_probs.sum(dim=1) - old_log_probs.sum(dim=1)
+                #                 # )
+
+                #                 # clipped_ratio = ratio.clamp(
+                #                 #     min=1.0 - self.config.clip_range,
+                #                 #     max=1.0 + self.config.clip_range,
+                #                 # )
+
+                #                 # or do we want to calculate ratios to clip independently, and then aggregate?
+                #                 ratio = T.exp(log_probs - old_log_probs)
+
+                #                 clipped_ratio = ratio.clamp(min=1.0 - self.config.clip_range,
+                #                                             max=1.0 + self.config.clip_range)
+
+                #                 ratio = ratio.sum(dim=1)
+                #                 clipped_ratio = clipped_ratio.sum(dim=1)
+
+                #             entropy = T.stack(
+                #                 [
+                #                     categorical.entropy().mean()
+                #                     for categorical in categoricals
+                #                 ]
+                #             ).mean()
+
+                #             if self.config.use_gae:
+                #                 advantages, returns = compute_gae_batches(
+                #                     rewards, values, next_values, dones, self.config
+                #                 )
+                #             else:
+                #                 returns = compute_returns(
+                #                     rewards,
+                #                     next_values,
+                #                     dones,
+                #                     self.config,
+                #                 )
+                #                 advantages = returns - values
+
+                #             if self.config.use_ppo:
+                #                 actor_loss = T.min(
+                #                     ratio * advantages.detach(),  # type: ignore
+                #                     clipped_ratio * advantages.detach(),  # type: ignore
+                #                 )  # type: ignore
+                #                 actor_loss = (-actor_loss).mean()  # type: ignore
+                #             else:
+                #                 actor_loss = (
+                #                     -log_probs.sum(dim=1) * advantages.detach()
+                #                 ).mean()
+                #             critic_loss = (
+                #                 advantages.pow(2).mean() * self.config.critic_coeff
+                #             )
+                #             entropy_loss = entropy * self.config.entropy_coeff
+                #             loss = actor_loss + critic_loss - entropy_loss
+
+                #             batches.set_postfix(
+                #                 {
+                #                     "loss": loss.item(),
+                #                     "al": actor_loss.item(),
+                #                     "cl": critic_loss.item(),
+                #                     "ent": entropy_loss.item(),
+                #                 }
+                #             )
+
+                #             opt.zero_grad()
+                #             loss.backward()
+
+                #             if self.config.use_ppo:
+                #                 # save model as previous model
+                #                 previous_model.load_state_dict(model.state_dict())  # type: ignore
+
+                #             nn.utils.clip_grad_norm_(model.parameters(), self.config.max_grad_norm)
+                #             opt.step()
+
+                #             real_losses.append(loss.item())
+                #             actor_losses.append(actor_loss.item())
+                #             critic_losses.append(critic_loss.item())
+                #             entropies.append(entropy_loss.item())
+
+                # metrics = {
+                #     "loss/real": np.array(real_losses).mean(),
+                #     "loss/actor": np.array(actor_losses).mean(),
+                #     "loss/critic": np.array(critic_losses).mean(),
+                #     "loss/entropy": np.array(entropies).mean(),
+                # }
+                # if (
+                #     (cycles > 0 and
+                #      cycles % self.config.test_interval == 0)
+                #     or step_n > self.config.total_steps
+                # ):
+                #     player.reload_from(model)
+                #     test_rewards = self.test(player, episodes=5)
+
+                #     _max_reward = np.array(test_rewards).max()
+                #     metrics["episode_reward/mean"] = np.array(test_rewards).mean()
+                #     metrics["episode_reward/max"] = _max_reward
+
+                #     if _max_reward > max_reward:
+                #         wandb.run.summary["episode_reward/max"] = _max_reward
+                #         max_reward = _max_reward
+
+                #     metrics["video"] = self.last_video(step_n)
+                #     wandb.log_artifact(
+                #         self.last_replay(
+                #             map_name=self.config.environment, step_n=step_n
+                #         )
+                #     )
+
+                # wandb.log(metrics, step=step_n, commit=True)
+
+                # cycles += 1
+
+                # _played_steps = sum([len(e) for e in trajectories])
+                # pbar.update(_played_steps)
+                # step_n += _played_steps
+
         wandb.finish()
         self.env.stop()
-        self.test_env.stop()
+        #self.test_env.stop()
