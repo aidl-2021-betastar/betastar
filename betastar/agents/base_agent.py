@@ -48,35 +48,35 @@ class BaseAgent(object):
         artifact.add_file(str(replays[-1]))
         return artifact
 
-    def test(self, player: Player, episodes = 5) -> List[float]:
-        rewards: List[float] = []
-        for episode in tqdm(range(episodes), unit="episodes"):
-            screen, minimap, non_spatial, _reward, _done, action_mask = self.test_env.reset()
+    # def test(self, player: Player, episodes = 5) -> List[float]:
+    #     rewards: List[float] = []
+    #     for episode in tqdm(range(episodes), unit="episodes"):
+    #         screen, minimap, non_spatial, _reward, _done, action_mask = self.test_env.reset()
 
-            done = False
-            ep_reward = 0.0
+    #         done = False
+    #         ep_reward = 0.0
 
-            while not done:
-                with T.no_grad():
-                    actions = player.act(screen, minimap, non_spatial, action_mask)
-                    values = player.evaluate(screen, minimap, non_spatial)
+    #         while not done:
+    #             with T.no_grad():
+    #                 actions = player.act(screen, minimap, non_spatial, action_mask)
+    #                 values = player.evaluate(screen, minimap, non_spatial)
 
-                (
-                    screen,
-                    minimap,
-                    non_spatial,
-                    rewards_,
-                    dones,
-                    action_mask,
-                ) = self.test_env.step(actions)
+    #             (
+    #                 screen,
+    #                 minimap,
+    #                 non_spatial,
+    #                 rewards_,
+    #                 dones,
+    #                 action_mask,
+    #             ) = self.test_env.step(actions)
 
-                ep_reward += rewards_[0].item()
+    #             ep_reward += rewards_[0].item()
 
-                done = dones[0]
+    #             done = dones[0]
 
-            rewards.append(ep_reward)
+    #         rewards.append(ep_reward)
 
-        return rewards
+    #     return rewards
 
 
     def play(self, player: Player, reset=False) -> Tuple[List[Trajectory], List[float]]:

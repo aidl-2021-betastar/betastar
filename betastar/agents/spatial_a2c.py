@@ -345,27 +345,27 @@ def compute_gae_batches(
     return T.cat(batch_advantages), T.cat(batch_returns)
 
 
-class A2CPlayer(Player):
-    def __init__(self, model: ActorCritic) -> None:
-        super(A2CPlayer).__init__()
-        self.model = model
+# class A2CPlayer(Player):
+#     def __init__(self, model: ActorCritic) -> None:
+#         super(A2CPlayer).__init__()
+#         self.model = model
 
-    def act(
-        self, screen: Tensor, minimap: Tensor, non_spatial: Tensor, action_mask: Tensor
-    ) -> Tensor:
-        latents = self.model.encode(screen, minimap, non_spatial)
-        return self.model.act(
-            latents,
-            action_mask=action_mask,
-        )
+#     def act(
+#         self, screen: Tensor, minimap: Tensor, non_spatial: Tensor, action_mask: Tensor
+#     ) -> Tensor:
+#         latents = self.model.encode(screen, minimap, non_spatial)
+#         return self.model.act(
+#             latents,
+#             action_mask=action_mask,
+#         )
 
-    def evaluate(self, screen: Tensor, minimap: Tensor, non_spatial: Tensor) -> Tensor:
-        latents = self.model.encode(screen, minimap, non_spatial)
-        return self.model.critic(latents)
+#     def evaluate(self, screen: Tensor, minimap: Tensor, non_spatial: Tensor) -> Tensor:
+#         latents = self.model.encode(screen, minimap, non_spatial)
+#         return self.model.critic(latents)
 
-    def reload_from(self, model: nn.Module):
-        self.model.load_state_dict(model.state_dict())  # type: ignore
-        self.model.eval()
+#     def reload_from(self, model: nn.Module):
+#         self.model.load_state_dict(model.state_dict())  # type: ignore
+#         self.model.eval()
 
 
 class MultiCategorical:
@@ -387,7 +387,11 @@ class MultiCategorical:
         return [torch.argmax(dist.logits, dim=-1) for dist in self.dists]
 
 
-class A2C(base_agent.BaseAgent):
+class SpatialA2C(base_agent.BaseAgent):
+    """
+    Plays MoveToBeaconSimple (a spatial version of MoveToBeacon with action space (spatial_dim, spatial_dim))
+    """
+
     def dataloader(self, trajectories: List[Trajectory]) -> DataLoader:
         return DataLoader(
             UnrollDataset(trajectories),
@@ -502,34 +506,23 @@ class A2C(base_agent.BaseAgent):
                     'loss/entropy': entropies.mean()
                 }
 
-                _max_reward = np.mean(reward_list).max()
+                _max_reward = np.max(reward_list)
 
                 if _max_reward > max_reward:
                     wandb.run.summary["episode_reward/max"] = _max_reward
                     max_reward = _max_reward
 
-                # if (
-                #     (cycles > 0 and
-                #      cycles % self.config.test_interval == 0)
-                #     or step_n > self.config.total_steps
-                # ):
-                #     player.reload_from(model)
-                #     test_rewards = self.test(player, episodes=5)
-
-                #     _max_reward = np.array(test_rewards).max()
-                #     metrics["episode_reward/mean"] = np.array(test_rewards).mean()
-                #     metrics["episode_reward/max"] = _max_reward
-
-                #     if _max_reward > max_reward:
-                #         wandb.run.summary["episode_reward/max"] = _max_reward
-                #         max_reward = _max_reward
-
-                #     metrics["video"] = self.last_video(step_n)
-                #     wandb.log_artifact(
-                #         self.last_replay(
-                #             map_name=self.config.environment, step_n=step_n
-                #         )
-                #     )
+                if (
+                    (cycles > 0 and
+                     cycles % self.config.test_interval == 0)
+                    or step_n > self.config.total_steps
+                ):
+                    metrics["video"] = self.last_video(step_n)
+                    wandb.log_artifact(
+                        self.last_replay(
+                            map_name=self.config.environment, step_n=step_n
+                        )
+                    )
 
                 wandb.log(metrics, step=step_n, commit=True)
 

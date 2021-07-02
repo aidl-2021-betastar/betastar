@@ -8,7 +8,7 @@ import torch.multiprocessing as mp
 import wandb
 from pyvirtualdisplay import Display
 
-from betastar.agents.a2c import A2C
+from betastar.agents.spatial_a2c import SpatialA2C
 from betastar.agents.random_agent import RandomAgent
 
 
@@ -160,13 +160,13 @@ def run(
     np.random.seed(config.seed)
     torch.manual_seed(config.seed)
 
-    display = Display(visible=0, size=(800, 600))
+    display = Display(visible=False, size=(800, 600))
     display.start()
 
     if agent == "random":
         RandomAgent(config).run()
-    elif agent == "a2c":
-        A2C(config).run()
+    elif agent == "spatial_a2c":
+        SpatialA2C(config).run()
 
     display.stop()
     
