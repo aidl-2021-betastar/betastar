@@ -71,17 +71,15 @@ class ScreenNet(torch.nn.Module):
         )
 
         self.policy = torch.nn.Sequential(
-            torch.nn.Conv2d(32, out_channels=1, kernel_size=1),
-            #torch.nn.LayerNorm(in_channel),
+            torch.nn.Conv2d(32, out_channels=32, kernel_size=1),
+            torch.nn.InstanceNorm2d(32),
             torch.nn.ReLU(),
 
-            torch.nn.Conv2d(1, out_channels=1, kernel_size=1),
-            #torch.nn.InstanceNorm2d(1),
+            torch.nn.Conv2d(32, out_channels=32, kernel_size=1),
+            torch.nn.InstanceNorm2d(32),
+            torch.nn.ReLU(),
 
-            # torch.nn.Linear(32*screen_size*screen_size, 256),
-            # torch.nn.LayerNorm(256),
-            # torch.nn.ReLU(),
-            # torch.nn.Linear(256, 2*screen_size)
+            torch.nn.Conv2d(32, out_channels=1, kernel_size=1),
         )
 
         self.value = torch.nn.Sequential(
