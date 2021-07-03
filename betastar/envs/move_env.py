@@ -50,12 +50,10 @@ class MoveEnv(PySC2Env):
         super().__init__(**kwargs)
         self.action_space = spaces.Discrete(self.spatial_dim * self.spatial_dim)
 
-    def step(self, action: Action) -> Tuple[Observation, Reward, Done, Info]:
-        y = action.item() // self.spatial_dim
-        x = action.item() % self.spatial_dim
-
+    def step(self, action: Tensor) -> Tuple[Observation, Reward, Done, Info]:
+        x, y = action
         response = self._env.step(
-            [actions.FunctionCall(_MOVE_SCREEN, [_NOT_QUEUED, [y, x]])]
+            [actions.FunctionCall(_MOVE_SCREEN, [_NOT_QUEUED, [x.item(), y.item()]])]
         )[0]
         return (
             self._format_observation(response.observation),

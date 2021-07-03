@@ -21,7 +21,7 @@ def cli():
 @click.option(
     "--agent",
     "-a",
-    type=click.Choice(["random", "a2c"]),
+    type=click.Choice(["random", "spatial_a2c"]),
     default="random",
 )
 @click.option(

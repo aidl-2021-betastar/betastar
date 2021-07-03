@@ -19,7 +19,7 @@
             "args": [ 
                 "run",
                 "--agent",
-                "a2c",
+                "spatial_a2c",
                 "--environment",
                 "SC2MoveToBeaconSimple-v0",
                 "--num-workers",

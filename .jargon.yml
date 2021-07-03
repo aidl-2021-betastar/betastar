@@ -1,0 +1,45 @@
+reward_decay:
+  aka:
+    - gamma
+    - discount_factor
+  description: The discount factor used when calculating returns.
+
+critic_coeff:
+  description: The coefficient to downscale critic loss so that it learns slower than the actor.
+
+entropy_coeff:
+  aka: beta
+  description: The coefficient to downscale entropy loss so that it doesn't impact as much.
+
+spatial_dim:
+  aka: screen_size
+  description: The screen width (equal to its height).
+
+unroll_length:
+  aka:
+    - rollout_length
+    - trajectory_length
+  description: How many steps we play before learning from those.
+
+advantages:
+  description: How much better are the actions we took compared to the average action we could've taken.
+
+returns:
+  description: The sum of current and discounted future rewards.
+
+entropy:
+  aka: entropies
+  description: How diverse is the policy.
+
+log_probs:
+  aka: log_prob
+  description: The logarithm of the probabilities of the actions we took.
+
+screen:
+  description: An N-channel screen_size x screen_size tensor representing the main game screen. N is the number of feature channels it comes with.
+
+minimap:
+  description: An N-channel screen_size x screen_size tensor representing the minimap. N is the number of feature channels it comes with.
+
+non_spatials:
+  description: A flat tensor with useful scalar quantities (amount of minerals, gas, etc)

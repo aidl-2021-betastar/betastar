@@ -71,10 +71,17 @@ class ScreenNet(torch.nn.Module):
         )
 
         self.policy = torch.nn.Sequential(
-            torch.nn.Linear(32*screen_size*screen_size, 256),
-            torch.nn.LayerNorm(256),
+            torch.nn.Conv2d(32, out_channels=1, kernel_size=1),
+            #torch.nn.LayerNorm(in_channel),
             torch.nn.ReLU(),
-            torch.nn.Linear(256, 2*screen_size)
+
+            torch.nn.Conv2d(1, out_channels=1, kernel_size=1),
+            #torch.nn.InstanceNorm2d(1),
+
+            # torch.nn.Linear(32*screen_size*screen_size, 256),
+            # torch.nn.LayerNorm(256),
+            # torch.nn.ReLU(),
+            # torch.nn.Linear(256, 2*screen_size)
         )
 
         self.value = torch.nn.Sequential(
@@ -96,253 +103,252 @@ class ScreenNet(torch.nn.Module):
         self.apply(param_init)
 
     def forward(self, state):
-        encode = self.convnet(state)
-        encode = encode.reshape(encode.shape[0], -1)
+        encode = self.convnet(state / 255)
 
-        value = self.value(encode)
+        value = self.value(encode.reshape(encode.shape[0], -1).detach())
 
-        logits = self.policy(encode)
+        logits = self.policy(encode).squeeze(1)
 
-        return logits.split(self.screen_size, dim=-1), value
-
-
-class Encoder(nn.Module):
-    def __init__(
-        self,
-        screen_channels: int = 5,
-        minimap_channels: int = 4,
-        non_spatial_channels: int = 34,
-        encoded_size: int = 128,
-        spatial_dim: int = 16,
-    ):
-        conv_out_width = int(spatial_dim / 2 - 2)
-
-        super().__init__()
-
-        self.screen = nn.Sequential(
-            Scale(1 / 255),
-            nn.Conv2d(screen_channels, 16, kernel_size=3, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(16, 32, kernel_size=2),
-            nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(32 * conv_out_width * conv_out_width, encoded_size),
-            nn.ReLU(),
-        )
-
-        # self.minimap = nn.Sequential(
-        #     Scale(1 / 255),
-        #     nn.Conv2d(minimap_channels, 16, kernel_size=3, stride=2),
-        #     nn.ReLU(),
-        #     nn.Conv2d(16, 32, kernel_size=2),
-        #     nn.ReLU(),
-        #     nn.Flatten(),
-        #     nn.Linear(32 * conv_out_width * conv_out_width, encoded_size),
-        #     nn.ReLU(),
-        # )
-
-        # self.non_spatial = nn.Sequential(
-        #     nn.Linear(non_spatial_channels, encoded_size), nn.ReLU()
-        # )
-
-    def forward(self, screens, minimaps, non_spatials):
-        a = self.screen(screens)
-        #b = self.minimap(minimaps)
-        #c = self.non_spatial(non_spatials)
-        #return T.cat([a, b, c]).view(screens.shape[0], -1)
-        return a.view(screens.shape[0], -1)
+        return logits, value
 
 
-class ActorCritic(nn.Module):
-    def __init__(
-        self, env: PySC2Env, encoded_size: int = 128, hidden_size: int = 128
-    ) -> None:
-        super().__init__()
-        screen_channels: int = env.feature_original_shapes[0][0]  # type: ignore
-        minimap_channels: int = env.feature_original_shapes[1][0]  # type: ignore
-        non_spatial_channels: int = env.feature_original_shapes[2][0]  # type: ignore
+# class Encoder(nn.Module):
+#     def __init__(
+#         self,
+#         screen_channels: int = 5,
+#         minimap_channels: int = 4,
+#         non_spatial_channels: int = 34,
+#         encoded_size: int = 128,
+#         spatial_dim: int = 16,
+#     ):
+#         conv_out_width = int(spatial_dim / 2 - 2)
+
+#         super().__init__()
+
+#         self.screen = nn.Sequential(
+#             Scale(1 / 255),
+#             nn.Conv2d(screen_channels, 16, kernel_size=3, stride=2),
+#             nn.ReLU(),
+#             nn.Conv2d(16, 32, kernel_size=2),
+#             nn.ReLU(),
+#             nn.Flatten(),
+#             nn.Linear(32 * conv_out_width * conv_out_width, encoded_size),
+#             nn.ReLU(),
+#         )
+
+#         # self.minimap = nn.Sequential(
+#         #     Scale(1 / 255),
+#         #     nn.Conv2d(minimap_channels, 16, kernel_size=3, stride=2),
+#         #     nn.ReLU(),
+#         #     nn.Conv2d(16, 32, kernel_size=2),
+#         #     nn.ReLU(),
+#         #     nn.Flatten(),
+#         #     nn.Linear(32 * conv_out_width * conv_out_width, encoded_size),
+#         #     nn.ReLU(),
+#         # )
+
+#         # self.non_spatial = nn.Sequential(
+#         #     nn.Linear(non_spatial_channels, encoded_size), nn.ReLU()
+#         # )
+
+#     def forward(self, screens, minimaps, non_spatials):
+#         a = self.screen(screens)
+#         #b = self.minimap(minimaps)
+#         #c = self.non_spatial(non_spatials)
+#         #return T.cat([a, b, c]).view(screens.shape[0], -1)
+#         return a.view(screens.shape[0], -1)
 
 
-        if env.action_space.__class__ == spaces.Discrete:
-            self.discrete_action_space = True
-        else:
-            self.discrete_action_space = False
-            self.action_space = env.action_space.nvec.copy()  # type: ignore
-
-        self.encoder = Encoder(
-            encoded_size=encoded_size,
-            screen_channels=screen_channels,
-            minimap_channels=minimap_channels,
-            non_spatial_channels=non_spatial_channels,
-            spatial_dim=env.spatial_dim,
-        )
-
-        # self.backbone = nn.Sequential(
-        #     nn.Linear(encoded_size * 3, hidden_size), nn.ReLU()
-        # )
-
-        # self.actor = nn.Linear(encoded_size * 3, self.action_space.sum())  # type: ignore
-
-        # self.critic = nn.Linear(encoded_size * 3, 1)
-        self.actor = nn.Linear(encoded_size, env.action_space_length)  # type: ignore
-
-        self.critic = nn.Linear(encoded_size, 1)
-
-    def forward(
-        self, screens, minimaps, non_spatials, action_mask: ActionMask
-    ) -> Tuple[Action, Value]:
-        latent = self.encode(screens, minimaps, non_spatials)
-        return self.act(latent, action_mask=action_mask), self.critic(latent.detach())
-
-    def encode(self, screens, minimaps, non_spatials) -> Tensor:
-        return self.encoder(screens, minimaps, non_spatials)
-        #return self.backbone(self.encoder(screens, minimaps, non_spatials))
-
-    def act(self, latent, action_mask: ActionMask) -> Action:
-        logits = self._masked_logits(self.actor(latent), action_mask)
-        categoricals = self.discrete_categorical_distributions(logits)
-        return T.stack([categorical.sample() for categorical in categoricals], dim=1)
-
-    def _masked_logits(self, logits: Tensor, action_mask: ActionMask) -> Tensor:
-        """
-        Filters the logits according to the environment's action mask.
-        This ensures that actions that are not currently available will
-        never be sampled.
-        """
-        return T.where(action_mask.bool(), logits, T.tensor(-1e8))
-
-    def discrete_categorical_distributions(self, logits: Tensor) -> List[Categorical]:
-        """
-        Split the flat logits into the subsets that represent the many
-        categorical distributions (actions, screen coordinates, minimap coordinates, etc...).
-        Returns a Categorical object for each of those.
-        """
-        if self.discrete_action_space:
-            split_logits = [logits]
-        else:
-            split_logits = T.split(logits, self.action_space.tolist(), dim=1)  # type: ignore
-        return [Categorical(logits=logits) for logits in split_logits]
+# class ActorCritic(nn.Module):
+#     def __init__(
+#         self, env: PySC2Env, encoded_size: int = 128, hidden_size: int = 128
+#     ) -> None:
+#         super().__init__()
+#         screen_channels: int = env.feature_original_shapes[0][0]  # type: ignore
+#         minimap_channels: int = env.feature_original_shapes[1][0]  # type: ignore
+#         non_spatial_channels: int = env.feature_original_shapes[2][0]  # type: ignore
 
 
-def _compute_unroll_returns(rewards: Tensor, bootstrap: float, config: wandb.Config):
-    """
-    Computes returns on a single unroll of arbitrary length.
-    """
-    returns = []
-    R = bootstrap
-    for r in reversed(rewards):
-        R = r + R * config.reward_decay
-        returns.insert(0, R)
+#         if env.action_space.__class__ == spaces.Discrete:
+#             self.discrete_action_space = True
+#         else:
+#             self.discrete_action_space = False
+#             self.action_space = env.action_space.nvec.copy()  # type: ignore
 
-    returns = T.tensor(returns)
-    if config.normalize_returns:
-        return (returns - returns.mean()) / (
-            returns.std() + np.finfo(np.float32).eps.item()
-        )
-    else:
-        return returns
+#         self.encoder = Encoder(
+#             encoded_size=encoded_size,
+#             screen_channels=screen_channels,
+#             minimap_channels=minimap_channels,
+#             non_spatial_channels=non_spatial_channels,
+#             spatial_dim=env.spatial_dim,
+#         )
+
+#         # self.backbone = nn.Sequential(
+#         #     nn.Linear(encoded_size * 3, hidden_size), nn.ReLU()
+#         # )
+
+#         # self.actor = nn.Linear(encoded_size * 3, self.action_space.sum())  # type: ignore
+
+#         # self.critic = nn.Linear(encoded_size * 3, 1)
+#         self.actor = nn.Linear(encoded_size, env.action_space_length)  # type: ignore
+
+#         self.critic = nn.Linear(encoded_size, 1)
+
+#     def forward(
+#         self, screens, minimaps, non_spatials, action_mask: ActionMask
+#     ) -> Tuple[Action, Value]:
+#         latent = self.encode(screens, minimaps, non_spatials)
+#         return self.act(latent, action_mask=action_mask), self.critic(latent.detach())
+
+#     def encode(self, screens, minimaps, non_spatials) -> Tensor:
+#         return self.encoder(screens, minimaps, non_spatials)
+#         #return self.backbone(self.encoder(screens, minimaps, non_spatials))
+
+#     def act(self, latent, action_mask: ActionMask) -> Action:
+#         logits = self._masked_logits(self.actor(latent), action_mask)
+#         categoricals = self.discrete_categorical_distributions(logits)
+#         return T.stack([categorical.sample() for categorical in categoricals], dim=1)
+
+#     def _masked_logits(self, logits: Tensor, action_mask: ActionMask) -> Tensor:
+#         """
+#         Filters the logits according to the environment's action mask.
+#         This ensures that actions that are not currently available will
+#         never be sampled.
+#         """
+#         return T.where(action_mask.bool(), logits, T.tensor(-1e8))
+
+#     def discrete_categorical_distributions(self, logits: Tensor) -> List[Categorical]:
+#         """
+#         Split the flat logits into the subsets that represent the many
+#         categorical distributions (actions, screen coordinates, minimap coordinates, etc...).
+#         Returns a Categorical object for each of those.
+#         """
+#         if self.discrete_action_space:
+#             split_logits = [logits]
+#         else:
+#             split_logits = T.split(logits, self.action_space.tolist(), dim=1)  # type: ignore
+#         return [Categorical(logits=logits) for logits in split_logits]
 
 
-def compute_returns(
-    rewards: Tensor, next_values: Tensor, dones: Tensor, config: wandb.Config
-):
-    """
-    Computes returns on a series of unrolls.
-    """
-    unroll_rewards = rewards.split(config.unroll_length)
-    unroll_next_values = next_values.split(config.unroll_length)
-    unroll_dones = dones.split(config.unroll_length)
+# def _compute_unroll_returns(rewards: Tensor, bootstrap: float, config: wandb.Config):
+#     """
+#     Computes returns on a single unroll of arbitrary length.
+#     """
+#     returns = []
+#     R = bootstrap
+#     for r in reversed(rewards):
+#         R = r + R * config.reward_decay
+#         returns.insert(0, R)
 
-    batch_returns = []
-    for (u_rewards, u_next_values, u_dones) in zip(
-        unroll_rewards, unroll_next_values, unroll_dones
-    ):
-        if u_dones[-1]:
-            bootstrap = 0.0
-        else:
-            bootstrap = u_next_values[-1].item()
-        batch_returns.append(_compute_unroll_returns(u_rewards, bootstrap, config))
-
-    return T.cat(batch_returns)
-
-
-# def compute_advantages(
-#     rewards: Tensor, values: Tensor, next_value: float, config: wandb.Config
-# ):
-#     advantages = []
-#     advantage = 0
-
-#     for r, v in zip(reversed(rewards), reversed(values)):
-#         td_error = r + next_value * config.reward_decay - v
-#         advantage = td_error + advantage * config.reward_decay * config.gae_lambda
-#         next_value = v
-#         advantages.insert(0, advantage)
-
-#     advantages = T.stack(advantages)
-#     if config.normalize_advantages:
-#         return (advantages - advantages.mean()) / (
-#             advantages.std() + np.finfo(np.float32).eps.item()
+#     returns = T.tensor(returns)
+#     if config.normalize_returns:
+#         return (returns - returns.mean()) / (
+#             returns.std() + np.finfo(np.float32).eps.item()
 #         )
 #     else:
-#         return advantages
+#         return returns
 
 
-def compute_gae(
-    rewards: Tensor,
-    values: Tensor,
-    next_values: Tensor,
-    dones: Tensor,
-    config: wandb.Config,
-) -> Tuple[Tensor, Tensor]:
-    N = len(rewards)
-    advantages = T.zeros_like(rewards).float()
-    lastgaelam = 0.0
-    for t in reversed(range(N)):
-        nextnonterminal = 1.0 - dones[t].item()  # type: ignore
-        nextvalues = next_values[t]
+# def compute_returns(
+#     rewards: Tensor, next_values: Tensor, dones: Tensor, config: wandb.Config
+# ):
+#     """
+#     Computes returns on a series of unrolls.
+#     """
+#     unroll_rewards = rewards.split(config.unroll_length)
+#     unroll_next_values = next_values.split(config.unroll_length)
+#     unroll_dones = dones.split(config.unroll_length)
 
-        delta = (
-            rewards[t] + config.reward_decay * nextvalues * nextnonterminal - values[t]
-        )
-        advantages[t] = lastgaelam = (
-            delta
-            + config.reward_decay * config.gae_lambda * nextnonterminal * lastgaelam
-        )
-    returns = advantages + values
+#     batch_returns = []
+#     for (u_rewards, u_next_values, u_dones) in zip(
+#         unroll_rewards, unroll_next_values, unroll_dones
+#     ):
+#         if u_dones[-1]:
+#             bootstrap = 0.0
+#         else:
+#             bootstrap = u_next_values[-1].item()
+#         batch_returns.append(_compute_unroll_returns(u_rewards, bootstrap, config))
 
-    if config.normalize_advantages:
-        advantages = (advantages - advantages.mean()) / (
-            advantages.std() + np.finfo(np.float32).eps.item()
-        )
+#     return T.cat(batch_returns)
+
+
+# # def compute_advantages(
+# #     rewards: Tensor, values: Tensor, next_value: float, config: wandb.Config
+# # ):
+# #     advantages = []
+# #     advantage = 0
+
+# #     for r, v in zip(reversed(rewards), reversed(values)):
+# #         td_error = r + next_value * config.reward_decay - v
+# #         advantage = td_error + advantage * config.reward_decay * config.gae_lambda
+# #         next_value = v
+# #         advantages.insert(0, advantage)
+
+# #     advantages = T.stack(advantages)
+# #     if config.normalize_advantages:
+# #         return (advantages - advantages.mean()) / (
+# #             advantages.std() + np.finfo(np.float32).eps.item()
+# #         )
+# #     else:
+# #         return advantages
+
+
+# def compute_gae(
+#     rewards: Tensor,
+#     values: Tensor,
+#     next_values: Tensor,
+#     dones: Tensor,
+#     config: wandb.Config,
+# ) -> Tuple[Tensor, Tensor]:
+#     N = len(rewards)
+#     advantages = T.zeros_like(rewards).float()
+#     lastgaelam = 0.0
+#     for t in reversed(range(N)):
+#         nextnonterminal = 1.0 - dones[t].item()  # type: ignore
+#         nextvalues = next_values[t]
+
+#         delta = (
+#             rewards[t] + config.reward_decay * nextvalues * nextnonterminal - values[t]
+#         )
+#         advantages[t] = lastgaelam = (
+#             delta
+#             + config.reward_decay * config.gae_lambda * nextnonterminal * lastgaelam
+#         )
+#     returns = advantages + values
+
+#     if config.normalize_advantages:
+#         advantages = (advantages - advantages.mean()) / (
+#             advantages.std() + np.finfo(np.float32).eps.item()
+#         )
         
-    return advantages, returns
+#     return advantages, returns
 
 
-def compute_gae_batches(
-    rewards: Tensor,
-    values: Tensor,
-    next_values: Tensor,
-    dones: Tensor,
-    config: wandb.Config,
-):
-    """
-    Computes GAE on a series of unrolls.
-    """
-    unroll_rewards = rewards.split(config.unroll_length)
-    unroll_values = values.split(config.unroll_length)
-    unroll_next_values = next_values.split(config.unroll_length)
-    unroll_dones = dones.split(config.unroll_length)
+# def compute_gae_batches(
+#     rewards: Tensor,
+#     values: Tensor,
+#     next_values: Tensor,
+#     dones: Tensor,
+#     config: wandb.Config,
+# ):
+#     """
+#     Computes GAE on a series of unrolls.
+#     """
+#     unroll_rewards = rewards.split(config.unroll_length)
+#     unroll_values = values.split(config.unroll_length)
+#     unroll_next_values = next_values.split(config.unroll_length)
+#     unroll_dones = dones.split(config.unroll_length)
 
-    batch_advantages = []
-    batch_returns = []
-    for (u_rewards, u_values, u_next_values, u_dones) in zip(
-        unroll_rewards, unroll_values, unroll_next_values, unroll_dones
-    ):
-        advs, rets = compute_gae(u_rewards, u_values, u_next_values, u_dones, config)
-        batch_advantages.append(advs)
-        batch_returns.append(rets)
+#     batch_advantages = []
+#     batch_returns = []
+#     for (u_rewards, u_values, u_next_values, u_dones) in zip(
+#         unroll_rewards, unroll_values, unroll_next_values, unroll_dones
+#     ):
+#         advs, rets = compute_gae(u_rewards, u_values, u_next_values, u_dones, config)
+#         batch_advantages.append(advs)
+#         batch_returns.append(rets)
 
-    return T.cat(batch_advantages), T.cat(batch_returns)
+#     return T.cat(batch_advantages), T.cat(batch_returns)
 
 
 # class A2CPlayer(Player):
@@ -402,11 +408,10 @@ class SpatialA2C(base_agent.BaseAgent):
 
     def run(self):
         device = T.device("cuda" if T.cuda.is_available() else "cpu")  # type: ignore
-        cpu = T.device("cpu")  # type: ignore
 
         env = spawn_env(self.config.environment, self.config.game_speed, spatial_dim=self.config.screen_size, rank=-1)
         #model = ActorCritic(env=env).to(device)
-        model = ScreenNet(env.feature_original_shapes[0][0], env.spatial_dim).to(device)
+        model = ScreenNet(env.feature_original_shapes[0][0], self.config.screen_size).to(device)
         wandb.watch(model, log="all")
 
         max_reward = 0
@@ -450,13 +455,14 @@ class SpatialA2C(base_agent.BaseAgent):
 
                 for i in tqdm(range(self.config.unroll_length), unit="steps", leave=False):
                     logits, value = model(screen)
-                    dist = MultiCategorical(*logits)
+                    dist = Categorical(logits=logits.reshape(logits.shape[0], -1))
                     action = dist.sample()
-                    log_prob = dist.log_prob(*action)
+                    log_prob = dist.log_prob(action)
                     entropy = dist.entropy()
-                    action = action[0]*self.config.screen_size + action[1]
+                    # action == x, y
+                    spatial_action = T.from_numpy(np.stack(np.unravel_index(action.cpu().numpy(), (self.config.screen_size, self.config.screen_size)))).T
 
-                    screen, _minimap, _non_spatial, reward, done, _action_mask = self.env.step(action.detach().to(cpu))
+                    screen, _minimap, _non_spatial, reward, done, _action_mask = self.env.step(spatial_action)
                     screen = screen.to(device)
 
                     with torch.no_grad():
@@ -469,6 +475,9 @@ class SpatialA2C(base_agent.BaseAgent):
                         if d == 1:
                             reward_list.append(eps_rewards[j].item())
                             eps_rewards[j] = 0
+                    
+                    if done.all():
+                        break
                 
                 # learn!
                 # all things are whatever x batch_size
@@ -479,12 +488,24 @@ class SpatialA2C(base_agent.BaseAgent):
                 next_values = T.stack([x[4] for x in transitions]).to(device)
                 entropies = T.stack([x[5] for x in transitions]).to(device)
 
+                # compute returns
                 R = next_values[-1]
-                advs = []
+                rets = []
                 for i in reversed(range(len(values))):
                     R = R * (1-dones[i].long()) * self.config.reward_decay + rewards[i]
-                    advs.append(R - values[i])
-                advantages = T.stack(advs).to(device)
+                    rets.append(R)
+                returns = T.stack(list(reversed(rets))).to(device)
+                if self.config.normalize_returns:
+                    returns = (returns - returns.mean()) / (
+                        returns.std() + np.finfo(np.float32).eps.item()
+                    )
+
+                # compute advantages
+                advantages = returns - values
+                if self.config.normalize_advantages:
+                    advantages = (advantages - advantages.mean()) / (
+                        advantages.std() + np.finfo(np.float32).eps.item()
+                    )
                 
                 value_loss = advantages.pow(2).mean() * self.config.critic_coeff
                 policy_loss = (-log_probs * advantages.detach()).mean()
