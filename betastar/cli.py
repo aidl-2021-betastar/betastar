@@ -54,12 +54,12 @@ def cli():
 @click.option("--total-steps", default=1000000)
 @click.option("--batch-size", default=32)
 @click.option("--unroll-length", default=60)
-@click.option("--gae-lambda", default=0.95)
-@click.option("--use-gae/--no-use-gae", default=True)
+@click.option("--trace-decay", default=0.95, help="Alpha hyperparameter (GAE)")
+@click.option("--use-gae/--no-use-gae", default=False)
 @click.option("--use-ppo/--no-use-ppo", default=False)
 @click.option("--clip-range", default=0.1)
-@click.option("--normalize-advantages/--no-normalize-advantages", default=True)
-@click.option("--normalize-returns/--no-normalize-returns", default=True)
+@click.option("--normalize-advantages/--no-normalize-advantages", default=False)
+@click.option("--normalize-returns/--no-normalize-returns", default=False)
 @click.option("--anneal-lr/--no-anneal-lr", default=False)
 @click.option("--entropy-coeff", default=0.01, help="Entropy regularisation term")
 @click.option("--critic-coeff", default=0.5, help="Critic regularisation term")
@@ -99,7 +99,7 @@ def run(
     total_steps: int,
     batch_size: int,
     unroll_length: int,
-    gae_lambda: float,
+    trace_decay: float,
     use_gae: bool,
     use_ppo: bool,
     clip_range: float,
@@ -133,7 +133,7 @@ def run(
             "total_steps": total_steps,
             "batch_size": batch_size,
             "unroll_length": unroll_length,
-            "gae_lambda": gae_lambda,
+            "trace_decay": trace_decay,
             "use_gae": use_gae,
             "use_ppo": use_ppo,
             "clip_range": clip_range,

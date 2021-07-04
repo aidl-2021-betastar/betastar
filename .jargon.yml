@@ -1,9 +1,22 @@
+<<<<<<< HEAD
+=======
+
+>>>>>>> Add opt-in GAE impl
 reward_decay:
   aka:
     - gamma
     - discount_factor
   description: The discount factor used when calculating returns.
 
+<<<<<<< HEAD
+=======
+trace_decay:
+  aka:
+    - alpha
+    - gae_lambda
+  description: A coefficient that smoothly goes from 0 (1-step returns) to 1 (full monte-carlo)
+
+>>>>>>> Add opt-in GAE impl
 critic_coeff:
   description: The coefficient to downscale critic loss so that it learns slower than the actor.
 
@@ -42,4 +55,11 @@ minimap:
   description: An N-channel screen_size x screen_size tensor representing the minimap. N is the number of feature channels it comes with.
 
 non_spatials:
+<<<<<<< HEAD
   description: A flat tensor with useful scalar quantities (amount of minerals, gas, etc)
+=======
+  description: A flat tensor with useful scalar quantities (amount of minerals, gas, etc)
+
+bootstrap:
+  description: The predicted value of the next state of a trajectory that hasn't ended yet. Since it hasn't ended, we don't know what the future value is, so we use the critic to predict it and use it as an "educated guess" when calculating future returns.
+>>>>>>> Add opt-in GAE impl

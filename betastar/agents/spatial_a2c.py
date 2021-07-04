@@ -486,6 +486,7 @@ class SpatialA2C(base_agent.BaseAgent):
                 next_values = T.stack([x[4] for x in transitions]).to(device)
                 entropies = T.stack([x[5] for x in transitions]).to(device)
 
+<<<<<<< HEAD
                 # compute returns
                 R = next_values[-1]
                 rets = []
@@ -493,13 +494,41 @@ class SpatialA2C(base_agent.BaseAgent):
                     R = R * (1-dones[i].long()) * self.config.reward_decay + rewards[i]
                     rets.append(R)
                 returns = T.stack(list(reversed(rets))).to(device)
+=======
+                if self.config.use_gae:
+                    advantages = []
+                    advantage = 0
+                    next_value = next_values[-1]
+                    
+                    for i in reversed(range(len(values))):
+                        td_error = rewards[i] + next_value * self.config.reward_decay - values[i]
+                        advantage = td_error + advantage * self.config.reward_decay * self.config.trace_decay
+                        next_value = values[i]
+                        advantages.insert(0, advantage)
+                        
+                    advantages = T.stack(advantages).to(device)
+                    returns = advantages + values
+                else:
+                    # vanilla returns with bootstrap
+                    R = next_values[-1]
+                    rets = []
+                    for i in reversed(range(len(values))):
+                        R = R * (1-dones[i].long()) * self.config.reward_decay + rewards[i]
+                        rets.insert(0, R)
+                    returns = T.stack(rets).to(device)
+                    advantages = returns - values
+
+>>>>>>> Add opt-in GAE impl
                 if self.config.normalize_returns:
                     returns = (returns - returns.mean()) / (
                         returns.std() + np.finfo(np.float32).eps.item()
                     )
+<<<<<<< HEAD
 
                 # compute advantages
                 advantages = returns - values
+=======
+>>>>>>> Add opt-in GAE impl
                 if self.config.normalize_advantages:
                     advantages = (advantages - advantages.mean()) / (
                         advantages.std() + np.finfo(np.float32).eps.item()
