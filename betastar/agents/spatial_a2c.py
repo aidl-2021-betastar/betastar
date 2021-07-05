@@ -91,12 +91,21 @@ class ScreenNet(torch.nn.Module):
 
     def forward(self, state):
         encode = self.convnet(state / 255)
+        encode = encode.reshape(encode.shape[0], -1)
 
-        value = self.value(encode.reshape(encode.shape[0], -1).detach())
+        value = self.value(encode)
 
-        logits = self.policy(encode).squeeze(1)
+        logits = self.policy(encode)
 
-        return logits, value
+        return logits.split(self.screen_size, dim=-1), value
+    # def forward(self, state):
+    #     encode = self.convnet(state / 255)
+
+    #     value = self.value(encode.reshape(encode.shape[0], -1).detach())
+
+    #     logits = self.policy(encode).squeeze(1)
+
+    #     return logits, value
 
 
 class MultiCategorical:
