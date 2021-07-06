@@ -51,8 +51,8 @@ class MoveEnv(PySC2Env):
         self.action_space = spaces.Discrete(self.spatial_dim * self.spatial_dim)
 
     def step(self, action: Tensor) -> Tuple[Observation, Reward, Done, Info]:
-        y = action.item() // self.spatial_dim
-        x = action.item() % self.spatial_dim
+        x = action.item() // self.spatial_dim
+        y = action.item() % self.spatial_dim
 
         response = self._env.step(
             [actions.FunctionCall(_MOVE_SCREEN, [_NOT_QUEUED, [x, y]])]

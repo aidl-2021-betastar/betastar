@@ -274,39 +274,64 @@ class SpatialA2C(base_agent.BaseAgent):
                 old_log_probs = T.stack([x[6] for x in transitions]).to(device)
 
                 if self.config.use_gae:
-                    advantages = []
-                    advantage = 0
-                    next_value = (1 - dones[-1].long()) * next_values[-1]
-
-                    for i in reversed(range(len(values))):
-                        td_error = (
-                            rewards[i]
-                            + next_value * self.config.reward_decay
-                            - values[i]
-                        )
-                        advantage = (
-                            td_error
-                            + advantage
-                            * self.config.reward_decay
-                            * self.config.trace_decay
-                        )
-                        next_value = values[i]
-                        advantages.insert(0, advantage)
-
-                    advantages = T.stack(advantages).to(device)
+                    advantages = torch.zeros_like(values).to(device)
+                    lastgaelam = 0.0
+                    for t in reversed(range(len(values))):
+                        if t == len(values) - 1:
+                            nextnonterminal = 1.0 - dones[-1].float()
+                            nextvalues = next_values[-1]
+                        else:
+                            nextnonterminal = 1.0 - dones[t+1].float()
+                            nextvalues = next_values[t]
+                        delta = rewards[t] + self.config.reward_decay * nextvalues * nextnonterminal - values[t]
+                        advantages[t] = lastgaelam = delta + self.config.reward_decay * self.config.trace_decay * nextnonterminal * lastgaelam
                     returns = advantages + values
                 else:
-                    # vanilla returns with bootstrap
-                    R = next_values[-1]
-                    rets = []
-                    for i in reversed(range(len(values))):
-                        R = (
-                            R * (1 - dones[i].long()) * self.config.reward_decay
-                            + rewards[i]
-                        )
-                        rets.insert(0, R)
-                    returns = T.stack(rets).to(device)
+                    returns = torch.zeros_like(rewards).to(device)
+                    for t in reversed(range(len(values))):
+                        if t == len(values) - 1:
+                            nextnonterminal = 1.0 - dones[-1].float()
+                            next_return = values[-1]
+                        else:
+                            nextnonterminal = 1.0 - dones[t+1].float()
+                            next_return = returns[t+1]
+                        returns[t] = rewards[t] + self.config.reward_decay * nextnonterminal * next_return
                     advantages = returns - values
+
+                # if self.config.use_gae:
+                #     advantages = []
+                #     advantage = 0
+                #     next_value = (1 - dones[-1].long()) * next_values[-1]
+
+                #     for i in reversed(range(len(values))):
+                #         td_error = (
+                #             rewards[i]
+                #             + next_value * self.config.reward_decay
+                #             - values[i]
+                #         )
+                #         advantage = (
+                #             td_error
+                #             + advantage
+                #             * self.config.reward_decay
+                #             * self.config.trace_decay
+                #         )
+                #         next_value = values[i]
+                #         advantages.insert(0, advantage)
+
+                #     advantages = T.stack(advantages).to(device)
+                #     returns = advantages + values
+                # else:
+                #     # vanilla returns with bootstrap
+                #     R = next_values[-1]
+                #     rets = []
+                #     for i in reversed(range(len(values))):
+                #         R = (
+                #             R * (1 - dones[i].long()) * self.config.reward_decay
+                #             + rewards[i]
+                #         )
+                #         rets.insert(0, R)
+                #     returns = T.stack(rets).to(device)
+                #     advantages = returns - values
 
                 if self.config.normalize_returns:
                     returns = (returns - returns.mean()) / (
@@ -325,9 +350,9 @@ class SpatialA2C(base_agent.BaseAgent):
                         min=1.0 - self.config.clip_range,
                         max=1.0 + self.config.clip_range,
                     )
-                    policy_loss = T.min(
-                        surrogate_objective * advantages.detach(),
-                        clipped_surrogate_objective * advantages.detach(),
+                    policy_loss = T.max(
+                        surrogate_objective * -advantages.detach(),
+                        clipped_surrogate_objective * -advantages.detach(),
                     ).mean()
                 else:
                     policy_loss = (-log_probs * advantages.detach()).mean()
