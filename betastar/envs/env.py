@@ -120,15 +120,15 @@ class PySC2Env(gym.Env):
             "screen",
             "minimap",
             "screen2",
-            "queued",
-            "control_group_act",
-            "control_group_id",
+            #"queued",
+            #"control_group_act",
+            #"control_group_id",
             "select_add",
-            "select_point_act",
-            "select_unit_act",
-            "select_unit_id"
-            # "select_worker",
-            # "build_queue_id",
+            #"select_point_act",
+            #"select_unit_act",
+            #"select_unit_id"
+            "select_worker",
+            #"build_queue_id",
             # 'unload_id'
         ]
 
@@ -147,6 +147,17 @@ class PySC2Env(gym.Env):
             + list(action_args)
         )
 
+        # Which args are spatial in nature?
+        self.spatial_args_mask = T.zeros(self.action_space.nvec.sum()) # type: ignore
+        _act_args = [len(self.action_ids)] + list(action_args)
+        idx = len(self.action_ids)
+        for s in ['screen', 'minimap', 'screen2']:
+            if s in self.args_idx:
+                arg_len = sum(_act_args[self.args_idx[s]]) # type: ignore
+                self.spatial_args_mask[slice(idx, idx + arg_len)] = 1
+                idx += arg_len
+        
+
     def random_action(self) -> Action:
         action = self.action_space.sample()
         if self.is_available_action(action[0]):
@@ -160,13 +171,14 @@ class PySC2Env(gym.Env):
     def step(self, action: Action) -> Tuple[Observation, Reward, Done, Info]:
         action = action.numpy()
         defaults = {
+            "queued": 0,
             "control_group_act": 0,
             "control_group_id": 0,
             "select_point_act": 0,
             "select_unit_act": 0,
             "select_unit_id": 0,
-            # "build_queue_id": 0,
-            # "unload_id": 0,
+            "build_queue_id": 0,
+            "unload_id": 0,
         }
         action_id_idx, args = action[0], []
         action_id = self.action_ids[action_id_idx]

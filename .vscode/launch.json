@@ -12,42 +12,14 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Move To Beacon Debug",
+            "name": "Move To Beacon Simple (MovePPO)",
             "type": "python",
             "request": "launch",
             "module": "betastar",
             "args": [ 
                 "run",
                 "--agent",
-                "spatial_a2c",
-                "--environment",
-                "SC2MoveToBeaconSimple-v0",
-                "--use-gae",
-                "--use-ppo",
-                "--num-workers",
-                "2",
-                "--learning-rate",
-                "0.0001",
-                "--unroll-length",
-                "20",
-                "--reward-decay",
-                "0.99",
-                "--entropy-coeff",
-                "0.01",
-                "--total-steps",
-                "10000",
-                "--dryrun"
-            ]
-        },
-        {
-            "name": "Move To Beacon Simple (PPO)",
-            "type": "python",
-            "request": "launch",
-            "module": "betastar",
-            "args": [ 
-                "run",
-                "--agent",
-                "spatial_a2c",
+                "move_ppo",
                 "--environment",
                 "SC2MoveToBeaconSimple-v0",
                 "--num-workers",
@@ -68,7 +40,38 @@
                 "0.5",
                 "--total-steps",
                 "10000000"
-                //"--dryrun"
+            ]
+        },
+        {
+            "name": "Move To Beacon (FullPPO)",
+            "type": "python",
+            "request": "launch",
+            "module": "betastar",
+            "args": [ 
+                "run",
+                "--agent",
+                "full_ppo",
+                "--environment",
+                "SC2MoveToBeacon-v0",
+                "--num-workers",
+                "4",
+                "--learning-rate",
+                "0.0001",
+                "--use-ppo",
+                "--use-gae",
+                "--clip-range",
+                "0.25",
+                "--unroll-length",
+                "60",
+                "--reward-decay",
+                "0.99",
+                "--entropy-coeff",
+                "0.01",
+                "--critic-coeff",
+                "0.5",
+                "--total-steps",
+                "10000000",
+                "--dryrun"
             ]
         },
         {

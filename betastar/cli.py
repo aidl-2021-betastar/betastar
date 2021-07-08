@@ -1,3 +1,4 @@
+from betastar.agents import MovePPO, FullPPO, RandomAgent
 import os
 import random
 
@@ -7,9 +8,6 @@ import torch
 import torch.multiprocessing as mp
 import wandb
 from pyvirtualdisplay import Display
-
-from betastar.agents.spatial_a2c import SpatialA2C
-from betastar.agents.random_agent import RandomAgent
 
 
 @click.group()
@@ -21,7 +19,7 @@ def cli():
 @click.option(
     "--agent",
     "-a",
-    type=click.Choice(["random", "spatial_a2c"]),
+    type=click.Choice(["random", "move_ppo", "full_ppo"]),
     default="random",
 )
 @click.option(
@@ -32,7 +30,7 @@ def cli():
             "SC2Game-v0",
             "SC2MoveToBeacon-v0",
             "SC2MoveToBeaconSimple-v0",
-            "SC2MoveToBeaconSimpleOrNot-v0",
+            "SC2MoveToBeaconMini-v0",
             "SC2MoveToBeacon-v1",
             "SC2CollectMineralShards-v0",
             "SC2CollectMineralShards-v1",
@@ -165,8 +163,10 @@ def run(
 
     if agent == "random":
         RandomAgent(config).run()
-    elif agent == "spatial_a2c":
-        SpatialA2C(config).run()
+    elif agent == "move_ppo":
+        MovePPO(config).run()
+    elif agent == "full_ppo":
+        FullPPO(config).run()
 
     display.stop()
     

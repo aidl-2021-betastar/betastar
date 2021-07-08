@@ -30,8 +30,8 @@ register(
 )
 
 register(
-    id='SC2MoveToBeaconSimpleOrNot-v0',
-    entry_point='betastar.envs:MoveOrNotEnv',
+    id='SC2MoveToBeaconMini-v0',
+    entry_point='betastar.envs:PySC2Env',
     kwargs={
         'map_name': "MoveToBeacon",
         "action_ids": [

@@ -9,103 +9,10 @@ from betastar.agents import base_agent
 from betastar.data import Trajectory, UnrollDataset, collate
 from betastar.envs.env import Action, ActionMask, PySC2Env, Value, spawn_env
 from betastar.player import Player
-from torch import Tensor, nn
+from torch import nn
 from torch.distributions.categorical import Categorical
 from torch.optim import Adam
-from torch.utils.data import DataLoader
-from tqdm import tqdm, trange
-
-
-class ScreenNet(torch.nn.Module):
-    """Model for movement based mini games in sc2.
-    This network only takes screen input and only returns spatial outputs.
-    Some of the example min games are MoveToBeacon and CollectMineralShards.
-    Arguments:
-        - in_channel: Number of feature layers in the screen input
-        - screen_size: Screen size of the mini game. If 64 is given output
-            size will be 64*64
-    Note that output size depends on screen_size.
-    """
-
-    class ResidualConv(torch.nn.Module):
-        def __init__(self, in_channel, **kwargs):
-            super().__init__()
-            assert kwargs["out_channels"] == in_channel, (
-                "input channel must" "be the same as out" " channels"
-            )
-            self.block = torch.nn.Sequential(
-                torch.nn.Conv2d(**kwargs),
-                torch.nn.InstanceNorm2d(in_channel),
-                torch.nn.ReLU(),
-                torch.nn.Conv2d(**kwargs),
-                torch.nn.InstanceNorm2d(in_channel),
-                torch.nn.ReLU(),
-            )
-
-        def forward(self, x):
-            res_x = self.block(x)
-            return res_x + x
-
-    def __init__(self, in_channel, screen_size):
-        super().__init__()
-        res_kwargs = {
-            "in_channels": 32,
-            "out_channels": 32,
-            "kernel_size": 3,
-            "stride": 1,
-            "padding": 1,
-        }
-        self.convnet = torch.nn.Sequential(
-            torch.nn.Conv2d(in_channel, 32, 3, 1, padding=1),
-            self.ResidualConv(32, **res_kwargs),
-            self.ResidualConv(32, **res_kwargs),
-            self.ResidualConv(32, **res_kwargs),
-            self.ResidualConv(32, **res_kwargs),
-        )
-
-        self.policy = torch.nn.Sequential(
-            torch.nn.Linear(32 * screen_size * screen_size, 256),
-            torch.nn.LayerNorm(256),
-            torch.nn.ReLU(),
-            torch.nn.Linear(256, 2 * screen_size),
-        )
-
-        self.value = torch.nn.Sequential(
-            torch.nn.Linear(32 * screen_size * screen_size, 256),
-            torch.nn.ReLU(),
-            torch.nn.Linear(256, 1),
-        )
-
-        self.screen_size = screen_size
-        gain = torch.nn.init.calculate_gain("relu")
-
-        def param_init(module):
-            if isinstance(module, torch.nn.Linear):
-                torch.nn.init.xavier_normal_(module.weight, gain)
-                torch.nn.init.zeros_(module.bias)
-            if isinstance(module, torch.nn.Conv2d):
-                torch.nn.init.dirac_(module.weight)
-                torch.nn.init.zeros_(module.bias)  # type: ignore
-
-        self.apply(param_init)
-
-    def forward(self, state):
-        encode = self.convnet(state / 255)
-        encode = encode.reshape(encode.shape[0], -1)
-
-        value = self.value(encode)
-
-        logits = self.policy(encode)
-
-        return logits.split(self.screen_size, dim=-1), value
-    # def forward(self, state):
-    #     encode = self.convnet(state / 255)
-
-    #     value = self.value(encode.reshape(encode.shape[0], -1).detach())
-
-    #     logits = self.policy(encode).squeeze(1)
-
-    #     return logits, value
+from tqdm import tqdm
 
 
 class MultiCategorical:
@@ -126,18 +33,12 @@ class MultiCategorical:
         return [torch.argmax(dist.logits, dim=-1) for dist in self.dists]
 
 
-class SpatialA2C(base_agent.BaseAgent):
-    """
-    Plays MoveToBeaconSimple (a spatial version of MoveToBeacon with action space (spatial_dim, spatial_dim))
-    """
+class PPO(base_agent.BaseAgent):
+    def interpret_action(self, action: List[T.Tensor]) -> T.Tensor:
+        raise NotImplementedError()
 
-    def dataloader(self, trajectories: List[Trajectory]) -> DataLoader:
-        return DataLoader(
-            UnrollDataset(trajectories),
-            batch_size=self.config.batch_size,
-            shuffle=True,
-            collate_fn=collate,
-        )
+    def get_model(self, env: PySC2Env) -> nn.Module:
+        raise NotImplementedError()
 
     def run(self):
         device = T.device("cuda" if T.cuda.is_available() else "cpu")  # type: ignore
@@ -149,18 +50,13 @@ class SpatialA2C(base_agent.BaseAgent):
             spatial_dim=self.config.screen_size,
             rank=-1,
         )
-        # model = ActorCritic(env=env).to(device)
-        model = ScreenNet(
-            env.feature_original_shapes[0][0], self.config.screen_size
-        ).to(device)
+        model = self.get_model(env).to(device)
         wandb.watch(model, log="all")
 
         max_reward = 0
 
         if self.config.use_ppo:
-            previous_model = ScreenNet(
-                env.feature_original_shapes[0][0], self.config.screen_size
-            ).to(device)
+            previous_model = self.get_model(env).to(device)
             previous_model.load_state_dict(model.state_dict())  # type: ignore
 
         env.close()
@@ -179,7 +75,6 @@ class SpatialA2C(base_agent.BaseAgent):
 
         # set up environment
         screen, minimap, non_spatial, _reward, _done, action_mask = self.env.reset()
-        screen = screen.to(device)
 
         eps_rewards = np.zeros((self.config.num_workers, 1))
         reward_list = [0]
@@ -187,12 +82,10 @@ class SpatialA2C(base_agent.BaseAgent):
         step_n = 0
         with tqdm(range(self.config.total_steps), unit="steps", leave=True) as pbar:
             while step_n < self.config.total_steps:
-                # if self.config.anneal_lr:
-                #     frac = 1.0 - (cycles - 1.0) / total_cycles
-                #     lrnow = frac * self.config.learning_rate
-                #     opt.param_groups[0]['lr'] = lrnow
-
-                # player.reload_from(model)
+                if self.config.anneal_lr:
+                    frac = 1.0 - (cycles - 1.0) / total_cycles
+                    lrnow = frac * self.config.learning_rate
+                    opt.param_groups[0]['lr'] = lrnow
 
                 # play
                 transitions = []
@@ -200,7 +93,11 @@ class SpatialA2C(base_agent.BaseAgent):
                 for i in tqdm(
                     range(self.config.unroll_length), unit="steps", leave=False
                 ):
-                    logits, value = model(screen)
+                    screen = screen.to(device)
+                    minimap = minimap.to(device)
+                    non_spatial = non_spatial.to(device)
+                    action_mask = action_mask.to(device)
+                    logits, value = model(screen, minimap, non_spatial, action_mask)
 
                     dist = MultiCategorical(*logits)
                     action = dist.sample()
@@ -208,7 +105,7 @@ class SpatialA2C(base_agent.BaseAgent):
 
                     if self.config.use_ppo:
                         with T.no_grad():
-                            old_logits, _old_value = previous_model(screen)  # type: ignore
+                            old_logits, _old_value = previous_model(screen, minimap, non_spatial, action_mask)  # type: ignore
                             old_log_prob = MultiCategorical(*old_logits).log_prob(
                                 *action
                             )
@@ -217,23 +114,26 @@ class SpatialA2C(base_agent.BaseAgent):
                         old_log_prob = log_prob
 
                     entropy = dist.entropy()
-                    action = action[0] * self.config.screen_size + action[1]
+                    action = self.interpret_action(action)
 
                     (
                         screen,
-                        _minimap,
-                        _non_spatial,
+                        minimap,
+                        non_spatial,
                         reward,
                         done,
-                        _action_mask,
+                        action_mask,
                     ) = self.env.step(action.detach().to(cpu))
                     screen = screen.to(device)
+                    minimap = minimap.to(device)
+                    non_spatial = non_spatial.to(device)
+                    action_mask = action_mask.to(device)
 
                     with torch.no_grad():
                         (
                             _,
                             next_value,
-                        ) = model(screen)
+                        ) = model(screen, minimap, non_spatial, action_mask)
 
                     transitions.append(
                         (
@@ -261,8 +161,6 @@ class SpatialA2C(base_agent.BaseAgent):
                 entropy_losses = []
                 losses = []
 
-                # epochs = self.config.update_epochs if self.config.use_ppo else 1
-                # for i in range(epochs):
                 # learn!
                 # all things are whatever x batch_size
                 rewards = T.stack([x[0] for x in transitions]).to(device)
@@ -297,41 +195,6 @@ class SpatialA2C(base_agent.BaseAgent):
                             next_return = returns[t+1]
                         returns[t] = rewards[t] + self.config.reward_decay * nextnonterminal * next_return
                     advantages = returns - values
-
-                # if self.config.use_gae:
-                #     advantages = []
-                #     advantage = 0
-                #     next_value = (1 - dones[-1].long()) * next_values[-1]
-
-                #     for i in reversed(range(len(values))):
-                #         td_error = (
-                #             rewards[i]
-                #             + next_value * self.config.reward_decay
-                #             - values[i]
-                #         )
-                #         advantage = (
-                #             td_error
-                #             + advantage
-                #             * self.config.reward_decay
-                #             * self.config.trace_decay
-                #         )
-                #         next_value = values[i]
-                #         advantages.insert(0, advantage)
-
-                #     advantages = T.stack(advantages).to(device)
-                #     returns = advantages + values
-                # else:
-                #     # vanilla returns with bootstrap
-                #     R = next_values[-1]
-                #     rets = []
-                #     for i in reversed(range(len(values))):
-                #         R = (
-                #             R * (1 - dones[i].long()) * self.config.reward_decay
-                #             + rewards[i]
-                #         )
-                #         rets.insert(0, R)
-                #     returns = T.stack(rets).to(device)
-                #     advantages = returns - values
 
                 if self.config.normalize_returns:
                     returns = (returns - returns.mean()) / (
