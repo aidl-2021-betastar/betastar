@@ -1,5 +1,6 @@
 # from: https://raw.githubusercontent.com/vwxyzjn/gym-pysc2/master/gym_pysc2/envs/pysc2env.py
 # which was inspired by: https://github.com/inoryy/reaver/blob/master/reaver/envs/sc2.py
+from pathlib import Path
 from typing import List, Tuple
 
 import gym
@@ -36,7 +37,7 @@ class PySC2Env(gym.Env):
         spatial_dim=16,
         step_mul=8,
         map_name="MoveToBeacon",
-        rank=0,
+        output_path="./output",
         monitor=False
     ) -> None:
 
@@ -67,7 +68,7 @@ class PySC2Env(gym.Env):
                 )
             ],
             save_replay_episodes=1 if monitor else 0,
-            replay_dir=f"/tmp/betastar/{environment_name}",
+            replay_dir=Path(f"{output_path}/replays").absolute(),
             step_mul=self.step_mul,
             players=[sc2_env.Agent(sc2_env.Race.terran)],
         )
@@ -258,8 +259,8 @@ class PySC2Env(gym.Env):
             return array
 
 
-def spawn_env(environment: str, game_speed: int, spatial_dim: int, rank: int, monitor=False) -> PySC2Env:
-    env = gym.make(environment, environment_name=environment, spatial_dim=spatial_dim, rank=rank, step_mul=game_speed, monitor=monitor)
+def spawn_env(environment: str, game_speed: int, spatial_dim: int, output_path: str, monitor=False) -> PySC2Env:
+    env = gym.make(environment, environment_name=environment, spatial_dim=spatial_dim, step_mul=game_speed, monitor=monitor, output_path=output_path)
     if monitor:
-        env = wrappers.Monitor(env, directory=f"/tmp/betastar/{environment}", force=True)
+        env = wrappers.Monitor(env, directory=f"{output_path}/gym", force=True)
     return env  # type: ignore

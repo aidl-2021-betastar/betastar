@@ -23,13 +23,13 @@ class ProcEnv(object):
     w_conn: Optional[Connection]
     proc: Optional[SpawnProcess]
 
-    def __init__(self, context: SpawnContext, environment: str, game_speed: int, spatial_dim: int, rank: int, monitor=False) -> None:
+    def __init__(self, context: SpawnContext, environment: str, game_speed: int, spatial_dim: int, output_path: str, monitor=False) -> None:
         super(ProcEnv).__init__()
         self.ctx = context
         self.environment = environment
         self.game_speed = game_speed
         self.spatial_dim = spatial_dim
-        self.rank = rank
+        self.output_path = output_path
         self.monitor = monitor
         self._env = self.conn = self.w_conn = self.proc = None
 
@@ -61,7 +61,7 @@ class ProcEnv(object):
             msg, data = self.w_conn.recv()
             if msg == START:
                 self._env = spawn_env(
-                    self.environment, self.game_speed, spatial_dim=self.spatial_dim, rank=self.rank, monitor=self.monitor
+                    self.environment, self.game_speed, spatial_dim=self.spatial_dim, monitor=self.monitor, output_path=self.output_path
                 )
                 self.w_conn.send(DONE)
             elif msg == STEP:
@@ -82,10 +82,10 @@ class ProcEnv(object):
 
 
 class MultiProcEnv(object):
-    def __init__(self, environment: str, game_speed: int, spatial_dim: int, count: int, monitor=False):
+    def __init__(self, environment: str, game_speed: int, spatial_dim: int, count: int, output_path: str):
         super(MultiProcEnv).__init__()
         self.ctx = mp.get_context('spawn')
-        self.envs = [ProcEnv(self.ctx, environment, game_speed, spatial_dim, rank, monitor=rank==0) for rank in range(count)]
+        self.envs = [ProcEnv(self.ctx, environment, game_speed, spatial_dim, output_path, monitor=rank==0) for rank in range(count)]
 
     def start(self):
         for env in self.envs:

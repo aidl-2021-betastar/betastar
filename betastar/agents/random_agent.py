@@ -13,7 +13,7 @@ class RandomAgent(base_agent.BaseAgent):
         super().__init__(config)
 
     def run(self):
-        env = spawn_env(self.config.environment, self.config.game_speed, spatial_dim=self.config.screen_size, rank=0)
+        env = spawn_env(self.config.environment, self.config.game_speed, spatial_dim=self.config.screen_size, output_path='./output')
         with tqdm(range(self.config.episodes_per_epoch), unit="episodes") as pbar:
             for episode in pbar:
                 observation = env.reset()

@@ -33,13 +33,63 @@ class MultiCategorical:
         return [torch.argmax(dist.logits, dim=-1) for dist in self.dists]
 
 
-
 class PPO(base_agent.BaseAgent):
     def interpret_action(self, action: List[T.Tensor]) -> T.Tensor:
         raise NotImplementedError()
 
     def get_model(self, env: PySC2Env) -> nn.Module:
         raise NotImplementedError()
+
+    def test(self, parameters):
+        env = spawn_env(
+            self.config.environment,
+            self.config.game_speed,
+            spatial_dim=self.config.screen_size,
+            output_path="/tmp/nothing",
+            monitor=False,
+        )
+        model = self.get_model(env)
+        model.load_state_dict(parameters)
+        model.eval()
+        env.close()
+
+        episode_rewards = []
+
+        screen, minimap, non_spatial, reward, done, action_mask = self.env.reset()
+        for i in tqdm(range(self.config.episodes), unit="episodes"):
+            episode_reward = 0
+            while not done.all():
+                logits, _value = model(screen, minimap, non_spatial, action_mask)
+
+                dist = MultiCategorical(*logits)
+                action = dist.sample()
+
+                action = self.interpret_action(action)
+
+                (
+                    screen,
+                    minimap,
+                    non_spatial,
+                    reward,
+                    done,
+                    action_mask,
+                ) = self.env.step(action.detach())
+
+                episode_reward += reward[0].item() # type: ignore
+
+            episode_rewards.append(episode_reward)
+            metrics = {"episode_reward": episode_reward, "video": self.last_video(i)}
+            wandb.log_artifact(
+                self.last_replay(environment_name=self.config.environment, step_n=i)
+            )
+
+            wandb.log(metrics, step=i, commit=True)
+
+        wandb.summary["episode_reward/max"] = np.max(episode_rewards)
+        wandb.summary["episode_reward/mean"] = np.mean(episode_rewards)
+
+        wandb.finish()
+        self.env.stop()
 
     def run(self):
         device = T.device("cuda" if T.cuda.is_available() else "cpu")  # type: ignore
@@ -49,7 +99,8 @@ class PPO(base_agent.BaseAgent):
             self.config.environment,
             self.config.game_speed,
             spatial_dim=self.config.screen_size,
-            rank=-1,
+            output_path=self.config.output_path,
+            monitor=False,
         )
         model = self.get_model(env).to(device)
         wandb.watch(model, log="all")
@@ -175,10 +226,20 @@ class PPO(base_agent.BaseAgent):
                             nextnonterminal = 1.0 - dones[-1].float()
                             nextvalues = next_values[-1]
                         else:
-                            nextnonterminal = 1.0 - dones[t+1].float()
+                            nextnonterminal = 1.0 - dones[t + 1].float()
                             nextvalues = next_values[t]
-                        delta = rewards[t] + self.config.reward_decay * nextvalues * nextnonterminal - values[t]
-                        advantages[t] = lastgaelam = delta + self.config.reward_decay * self.config.trace_decay * nextnonterminal * lastgaelam
+                        delta = (
+                            rewards[t]
+                            + self.config.reward_decay * nextvalues * nextnonterminal
+                            - values[t]
+                        )
+                        advantages[t] = lastgaelam = (
+                            delta
+                            + self.config.reward_decay
+                            * self.config.trace_decay
+                            * nextnonterminal
+                            * lastgaelam
+                        )
                     returns = advantages + values
                 else:
                     returns = torch.zeros_like(rewards).to(device)
@@ -187,9 +248,12 @@ class PPO(base_agent.BaseAgent):
                             nextnonterminal = 1.0 - dones[-1].float()
                             next_return = values[-1]
                         else:
-                            nextnonterminal = 1.0 - dones[t+1].float()
-                            next_return = returns[t+1]
-                        returns[t] = rewards[t] + self.config.reward_decay * nextnonterminal * next_return
+                            nextnonterminal = 1.0 - dones[t + 1].float()
+                            next_return = returns[t + 1]
+                        returns[t] = (
+                            rewards[t]
+                            + self.config.reward_decay * nextnonterminal * next_return
+                        )
                     advantages = returns - values
 
                 if self.config.normalize_returns:
@@ -202,7 +266,6 @@ class PPO(base_agent.BaseAgent):
                     )
 
                 value_loss = advantages.pow(2).mean() * self.config.critic_coeff
-
 
                 if self.config.use_ppo:
                     surrogate_objective = (log_probs - old_log_probs).exp()
@@ -246,9 +309,11 @@ class PPO(base_agent.BaseAgent):
                     wandb.run.summary["episode_reward/max"] = _max_reward
                     max_reward = _max_reward
 
-                if (
-                    cycles > 0 and cycles % self.config.test_interval == 0
-                ) or step_n > self.config.total_steps:
+                _played_steps = self.config.unroll_length * self.config.num_workers
+
+                if (cycles > 0 and cycles % self.config.test_interval == 0) or (
+                    step_n + _played_steps
+                ) >= self.config.total_steps:
                     metrics["video"] = self.last_video(step_n)
                     wandb.log_artifact(
                         self.last_replay(
@@ -258,7 +323,8 @@ class PPO(base_agent.BaseAgent):
                     wandb.log_artifact(
                         self.last_model(
                             model,
-                            environment_name=self.config.environment, step_n=step_n
+                            environment_name=self.config.environment,
+                            step_n=step_n,
                         )
                     )
 
@@ -266,7 +332,6 @@ class PPO(base_agent.BaseAgent):
 
                 cycles += 1
 
-                _played_steps = self.config.unroll_length * self.config.num_workers
                 pbar.update(_played_steps)
                 step_n += _played_steps
 

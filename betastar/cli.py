@@ -1,3 +1,4 @@
+from pathlib import Path
 from betastar.agents import MovePPO, FullPPO, RandomAgent
 import os
 import random
@@ -48,9 +49,7 @@ def cli():
     "--render-interval", default=200, help="How many episodes to skip between renders"
 )
 @click.option("--reward-decay", default=0.95, help="Gamma hyperparameter")
-@click.option("--episodes", default=4)
 @click.option("--total-steps", default=1000000)
-@click.option("--batch-size", default=32)
 @click.option("--unroll-length", default=60)
 @click.option("--trace-decay", default=0.95, help="Alpha hyperparameter (GAE)")
 @click.option("--use-gae/--no-use-gae", default=False)
@@ -86,6 +85,12 @@ def cli():
     help="How many game steps per agent step (action/observation). None means use the map default",
 )
 @click.option(
+    "--output-path",
+    "-o",
+    type=click.Path(dir_okay=True, file_okay=False),
+    default="./output",
+)
+@click.option(
     "--dryrun", is_flag=True, help="Whether to run wandb in dryrun mode or not"
 )
 def run(
@@ -95,7 +100,6 @@ def run(
     reward_decay: float,
     episodes: int,
     total_steps: int,
-    batch_size: int,
     unroll_length: int,
     trace_decay: float,
     use_gae: bool,
@@ -114,7 +118,8 @@ def run(
     screen_size: int,
     normalize_advantages: bool,
     normalize_returns: bool,
-    anneal_lr: bool
+    anneal_lr: bool,
+    output_path: str,
 ):
     if dryrun or agent == "random":
         os.environ["WANDB_MODE"] = "dryrun"
@@ -129,7 +134,6 @@ def run(
             "episodes": episodes,
             "update_epochs": update_epochs,
             "total_steps": total_steps,
-            "batch_size": batch_size,
             "unroll_length": unroll_length,
             "trace_decay": trace_decay,
             "use_gae": use_gae,
@@ -147,12 +151,17 @@ def run(
             "screen_size": screen_size,
             "normalize_advantages": normalize_advantages,
             "normalize_returns": normalize_returns,
-            "anneal_lr": anneal_lr
+            "anneal_lr": anneal_lr,
+            "output_path": output_path,
         },
         monitor_gym=False,
     )
 
     config = wandb.config
+    config.update(
+        {"output_path": str((Path(config.output_path) / wandb.run.id).absolute())},
+        allow_val_change=True,
+    )
 
     random.seed(config.seed)
     np.random.seed(config.seed)
@@ -169,4 +178,38 @@ def run(
         FullPPO(config).run()
 
     display.stop()
-    
+
+
+@cli.command()
+@click.option("--model", "-m", type=click.Path(exists=True, dir_okay=False))
+@click.option("--episodes", "-e", type=int, default=4)
+@click.option(
+    "--output-path",
+    "-o",
+    type=click.Path(dir_okay=True, file_okay=False),
+    default="./output",
+)
+def test(
+    model: str,
+    episodes: int,
+    output_path: str,
+):
+    display = Display(visible=False, size=(800, 600))
+    display.start()
+
+    os.environ["WANDB_MODE"] = "dryrun"
+
+    saved = torch.load(model, map_location=torch.device("cpu"))
+    wandb.init(config=saved["config"])  # type: ignore
+    wandb.config.update(
+        {
+            "output_path": str((Path(output_path) / wandb.run.id).absolute()),
+            "num_workers": 1,
+            "episodes": episodes
+        },
+        allow_val_change=True,
+    )
+
+    FullPPO(wandb.config).test(saved["parameters"])  # type: ignore
+
+    display.stop()

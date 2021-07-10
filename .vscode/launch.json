@@ -43,10 +43,22 @@
             ]
         },
         {
+            "name": "Testing a model",
+            "type": "python",
+            "request": "launch",
+            "module": "betastar",
+            "args": [ 
+                "test",
+                "--model",
+                "output/2hxug6fu/last_model.pth",
+            ]
+        },
+        {
             "name": "Move To Beacon (FullPPO)",
             "type": "python",
             "request": "launch",
             "module": "betastar",
+            "justMyCode": false,
             "args": [ 
                 "run",
                 "--agent",
@@ -70,9 +82,7 @@
                 "--critic-coeff",
                 "0.5",
                 "--total-steps",
-                "2000",
-                "--test-interval",
-                "2",
+                "1000",
                 "--dryrun"
             ]
         },
