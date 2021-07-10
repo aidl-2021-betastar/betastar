@@ -71,6 +71,8 @@
                 "0.5",
                 "--total-steps",
                 "2000",
+                "--test-interval",
+                "2",
                 "--dryrun"
             ]
         },
