@@ -2,6 +2,8 @@ from pathlib import Path
 
 import wandb
 from betastar.envs.multiproc import MultiProcEnv
+from torch import nn
+import torch
 
 
 class BaseAgent(object):
@@ -33,4 +35,19 @@ class BaseAgent(object):
         replays = list(Path(f"/tmp/betastar/{self.config.environment}").glob("*.SC2Replay"))
         replays.sort()
         artifact.add_file(str(replays[-1]))
+        return artifact
+
+    def last_model(self, model: nn.Module, environment_name: str, step_n: int) -> wandb.Artifact:
+        artifact = wandb.Artifact(
+            name=f"{environment_name}.{step_n}",
+            type="model",
+            metadata={
+                "environment": environment_name,
+                "step": step_n,
+            },
+        )
+        path = Path(f"/tmp/betastar/{self.config.environment}/model.pth")
+        torch.save(model.state_dict(), path) # type: ignore
+        
+        artifact.add_file(str(path))
         return artifact

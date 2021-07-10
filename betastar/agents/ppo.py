@@ -33,6 +33,7 @@ class MultiCategorical:
         return [torch.argmax(dist.logits, dim=-1) for dist in self.dists]
 
 
+
 class PPO(base_agent.BaseAgent):
     def interpret_action(self, action: List[T.Tensor]) -> T.Tensor:
         raise NotImplementedError()
@@ -202,6 +203,7 @@ class PPO(base_agent.BaseAgent):
 
                 value_loss = advantages.pow(2).mean() * self.config.critic_coeff
 
+
                 if self.config.use_ppo:
                     surrogate_objective = (log_probs - old_log_probs).exp()
                     clipped_surrogate_objective = surrogate_objective.clamp(
@@ -250,6 +252,12 @@ class PPO(base_agent.BaseAgent):
                     metrics["video"] = self.last_video(step_n)
                     wandb.log_artifact(
                         self.last_replay(
+                            environment_name=self.config.environment, step_n=step_n
+                        )
+                    )
+                    wandb.log_artifact(
+                        self.last_model(
+                            model,
                             environment_name=self.config.environment, step_n=step_n
                         )
                     )
