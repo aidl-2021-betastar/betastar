@@ -41,7 +41,7 @@ class Encoder(nn.Module):
             "stride": 1,
             "padding": 1,
         }
-        self.screen = T.nn.Sequential(
+        self.screen = nn.Sequential(
             nn.Conv2d(screen_channels, 32, 3, 1, padding=1),
             ResidualConv(32, **res_kwargs),
             ResidualConv(32, **res_kwargs),
@@ -49,7 +49,7 @@ class Encoder(nn.Module):
             ResidualConv(32, **res_kwargs),
         )
 
-        self.minimap = T.nn.Sequential(
+        self.minimap = nn.Sequential(
             nn.Conv2d(minimap_channels, 32, 3, 1, padding=1),
             ResidualConv(32, **res_kwargs),
             ResidualConv(32, **res_kwargs),

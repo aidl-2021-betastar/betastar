@@ -70,7 +70,7 @@
                 "--critic-coeff",
                 "0.5",
                 "--total-steps",
-                "10000000",
+                "2000",
                 "--dryrun"
             ]
         },

@@ -17,20 +17,20 @@ class BaseAgent(object):
         self.env.start()
 
     def last_video(self, step: int) -> wandb.Video:
-        videos = list(Path("/tmp/betastar").glob("*.mp4"))
+        videos = list(Path(f"/tmp/betastar/{self.config.environment}").glob("*.mp4"))
         videos.sort()
         return wandb.Video(str(videos[-1]), f"step={step}")
 
-    def last_replay(self, map_name: str, step_n: int) -> wandb.Artifact:
+    def last_replay(self, environment_name: str, step_n: int) -> wandb.Artifact:
         artifact = wandb.Artifact(
-            name=f"{map_name}.{step_n}",
+            name=f"{environment_name}.{step_n}",
             type="replay",
             metadata={
-                "map": map_name,
+                "environment": environment_name,
                 "step": step_n,
             },
         )
-        replays = list(Path("/tmp/betastar").glob("*.SC2Replay"))
+        replays = list(Path(f"/tmp/betastar/{self.config.environment}").glob("*.SC2Replay"))
         replays.sort()
         artifact.add_file(str(replays[-1]))
         return artifact

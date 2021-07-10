@@ -82,11 +82,6 @@ class PPO(base_agent.BaseAgent):
         step_n = 0
         with tqdm(range(self.config.total_steps), unit="steps", leave=True) as pbar:
             while step_n < self.config.total_steps:
-                if self.config.anneal_lr:
-                    frac = 1.0 - (cycles - 1.0) / total_cycles
-                    lrnow = frac * self.config.learning_rate
-                    opt.param_groups[0]['lr'] = lrnow
-
                 # play
                 transitions = []
 
@@ -255,7 +250,7 @@ class PPO(base_agent.BaseAgent):
                     metrics["video"] = self.last_video(step_n)
                     wandb.log_artifact(
                         self.last_replay(
-                            map_name=self.config.environment, step_n=step_n
+                            environment_name=self.config.environment, step_n=step_n
                         )
                     )
 

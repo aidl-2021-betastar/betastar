@@ -1,8 +1,9 @@
 from betastar.envs.env import Value
 from typing import List, Tuple
 import torch
+from torch import nn
 
-class ScreenNet(torch.nn.Module):
+class ScreenNet(nn.Module):
     """Model for movement based mini games in sc2.
     This network only takes screen input and only returns spatial outputs.
     Some of the example min games are MoveToBeacon and CollectMineralShards.
@@ -13,19 +14,19 @@ class ScreenNet(torch.nn.Module):
     Note that output size depends on screen_size.
     """
 
-    class ResidualConv(torch.nn.Module):
+    class ResidualConv(nn.Module):
         def __init__(self, in_channel, **kwargs):
             super().__init__()
             assert kwargs["out_channels"] == in_channel, (
                 "input channel must" "be the same as out" " channels"
             )
-            self.block = torch.nn.Sequential(
-                torch.nn.Conv2d(**kwargs),
-                torch.nn.InstanceNorm2d(in_channel),
-                torch.nn.ReLU(),
-                torch.nn.Conv2d(**kwargs),
-                torch.nn.InstanceNorm2d(in_channel),
-                torch.nn.ReLU(),
+            self.block = nn.Sequential(
+                nn.Conv2d(**kwargs),
+                nn.InstanceNorm2d(in_channel),
+                nn.ReLU(),
+                nn.Conv2d(**kwargs),
+                nn.InstanceNorm2d(in_channel),
+                nn.ReLU(),
             )
 
         def forward(self, x):
@@ -41,37 +42,37 @@ class ScreenNet(torch.nn.Module):
             "stride": 1,
             "padding": 1,
         }
-        self.convnet = torch.nn.Sequential(
-            torch.nn.Conv2d(in_channel, 32, 3, 1, padding=1),
+        self.convnet = nn.Sequential(
+            nn.Conv2d(in_channel, 32, 3, 1, padding=1),
             self.ResidualConv(32, **res_kwargs),
             self.ResidualConv(32, **res_kwargs),
             self.ResidualConv(32, **res_kwargs),
             self.ResidualConv(32, **res_kwargs),
         )
 
-        self.policy = torch.nn.Sequential(
-            torch.nn.Linear(32 * screen_size * screen_size, 256),
-            torch.nn.LayerNorm(256),
-            torch.nn.ReLU(),
-            torch.nn.Linear(256, 2 * screen_size),
+        self.policy = nn.Sequential(
+            nn.Linear(32 * screen_size * screen_size, 256),
+            nn.LayerNorm(256),
+            nn.ReLU(),
+            nn.Linear(256, 2 * screen_size),
         )
 
-        self.value = torch.nn.Sequential(
-            torch.nn.Linear(32 * screen_size * screen_size, 256),
-            torch.nn.ReLU(),
-            torch.nn.Linear(256, 1),
+        self.value = nn.Sequential(
+            nn.Linear(32 * screen_size * screen_size, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
         )
 
         self.screen_size = screen_size
-        gain = torch.nn.init.calculate_gain("relu")
+        gain = nn.init.calculate_gain("relu")
 
         def param_init(module):
-            if isinstance(module, torch.nn.Linear):
-                torch.nn.init.xavier_normal_(module.weight, gain)
-                torch.nn.init.zeros_(module.bias)
-            if isinstance(module, torch.nn.Conv2d):
-                torch.nn.init.dirac_(module.weight)
-                torch.nn.init.zeros_(module.bias)  # type: ignore
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_normal_(module.weight, gain)
+                nn.init.zeros_(module.bias)
+            if isinstance(module, nn.Conv2d):
+                nn.init.dirac_(module.weight)
+                nn.init.zeros_(module.bias)  # type: ignore
 
         self.apply(param_init)
 

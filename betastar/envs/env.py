@@ -31,6 +31,7 @@ class PySC2Env(gym.Env):
 
     def __init__(
         self,
+        environment_name: str,
         action_ids: List[int] = [],
         spatial_dim=16,
         step_mul=8,
@@ -40,6 +41,7 @@ class PySC2Env(gym.Env):
     ) -> None:
 
         super().__init__()
+        self.environment_name = environment_name
         self.action_ids = action_ids
         self.spatial_dim = spatial_dim
         self.step_mul = step_mul
@@ -65,7 +67,7 @@ class PySC2Env(gym.Env):
                 )
             ],
             save_replay_episodes=1 if monitor else 0,
-            replay_dir=f"/tmp/betastar",
+            replay_dir=f"/tmp/betastar/{environment_name}",
             step_mul=self.step_mul,
             players=[sc2_env.Agent(sc2_env.Race.terran)],
         )
@@ -257,7 +259,7 @@ class PySC2Env(gym.Env):
 
 
 def spawn_env(environment: str, game_speed: int, spatial_dim: int, rank: int, monitor=False) -> PySC2Env:
-    env = gym.make(environment, spatial_dim=spatial_dim, rank=rank, step_mul=game_speed, monitor=monitor)
+    env = gym.make(environment, environment_name=environment, spatial_dim=spatial_dim, rank=rank, step_mul=game_speed, monitor=monitor)
     if monitor:
-        env = wrappers.Monitor(env, directory="/tmp/betastar", force=True)
+        env = wrappers.Monitor(env, directory=f"/tmp/betastar/{environment}", force=True)
     return env  # type: ignore
