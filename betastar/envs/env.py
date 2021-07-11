@@ -259,8 +259,8 @@ class PySC2Env(gym.Env):
             return array
 
 
-def spawn_env(environment: str, game_speed: int, spatial_dim: int, output_path: str, monitor=False) -> PySC2Env:
-    env = gym.make(environment, environment_name=environment, spatial_dim=spatial_dim, step_mul=game_speed, monitor=monitor, output_path=output_path)
+def spawn_env(environment: str, spatial_dim: int, output_path: str, monitor=False) -> PySC2Env:
+    env = gym.make(environment, environment_name=environment, spatial_dim=spatial_dim, monitor=monitor, output_path=output_path)
     if monitor:
         env = wrappers.Monitor(env, directory=f"{output_path}/gym", force=True)
     return env  # type: ignore

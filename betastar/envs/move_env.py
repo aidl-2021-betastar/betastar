@@ -1,16 +1,12 @@
 # from: https://raw.githubusercontent.com/vwxyzjn/gym-pysc2/master/gym_pysc2/envs/pysc2env.py
 # which was inspired by: https://github.com/inoryy/reaver/blob/master/reaver/envs/sc2.py
-from typing import List, Tuple
+from typing import Tuple
 
-import gym
-import numpy as np
-import pygame
-import torch as T
-from gym import spaces, wrappers
-from pysc2.env import sc2_env
+from gym import spaces
 from pysc2.env.environment import StepType
-from pysc2.lib import actions, features
+from pysc2.lib import actions
 from torch import Tensor
+
 from .env import PySC2Env
 
 Info = dict

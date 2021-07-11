@@ -48,7 +48,7 @@
             "request": "launch",
             "module": "betastar",
             "args": [ 
-                "test",
+                "play",
                 "--model",
                 "output/2hxug6fu/last_model.pth",
             ]

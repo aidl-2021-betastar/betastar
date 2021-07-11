@@ -12,7 +12,6 @@ class BaseAgent(object):
 
         self.env = MultiProcEnv(
             self.config.environment,
-            self.config.game_speed,
             self.config.screen_size,
             count=self.config.num_workers,
             output_path=self.config.output_path

@@ -1,7 +1,9 @@
-from betastar.envs.env import Value
 from typing import List, Tuple
+
 import torch
+from betastar.envs.env import Value
 from torch import nn
+
 
 class ScreenNet(nn.Module):
     """Model for movement based mini games in sc2.
@@ -75,7 +77,6 @@ class ScreenNet(nn.Module):
                 nn.init.zeros_(module.bias)  # type: ignore
 
         self.apply(param_init)
-
 
     def forward(
         self, screens, _minimaps, _non_spatials, _action_mask

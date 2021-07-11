@@ -1,7 +1,6 @@
-from pathlib import Path
-from betastar.agents import MovePPO, FullPPO, RandomAgent
 import os
 import random
+from pathlib import Path
 
 import click
 import numpy as np
@@ -9,6 +8,8 @@ import torch
 import torch.multiprocessing as mp
 import wandb
 from pyvirtualdisplay import Display
+
+from betastar.agents import FullPPO, MovePPO, RandomAgent
 
 
 @click.group()
@@ -45,9 +46,6 @@ def cli():
     ),
     default="SC2MoveToBeacon-v0",
 )
-@click.option(
-    "--render-interval", default=200, help="How many episodes to skip between renders"
-)
 @click.option("--reward-decay", default=0.95, help="Gamma hyperparameter")
 @click.option("--total-steps", default=1000000)
 @click.option("--unroll-length", default=60)
@@ -57,32 +55,20 @@ def cli():
 @click.option("--clip-range", default=0.1)
 @click.option("--normalize-advantages/--no-normalize-advantages", default=False)
 @click.option("--normalize-returns/--no-normalize-returns", default=False)
-@click.option("--anneal-lr/--no-anneal-lr", default=False)
 @click.option("--entropy-coeff", default=0.01, help="Entropy regularisation term")
 @click.option("--critic-coeff", default=0.5, help="Critic regularisation term")
 @click.option("--learning-rate", default=2.5e-4)
-@click.option("--max-grad-norm", default=0.5)
 @click.option(
-    "--test-interval",
+    "--checkpoint-interval",
     default=100,
-    help="Play/learn cycles to wait before running a test round",
+    help="Play/learn cycles to wait before saving replay, video and model",
 )
 @click.option("--num-workers", default=int(mp.cpu_count()))
 @click.option("--seed", default=42)
 @click.option(
-    "--update-epochs",
-    default=4,
-    help="Number of times to learn from each experience",
-)
-@click.option(
     "--screen-size",
     default=16,
     help="Play in a ?x? screen",
-)
-@click.option(
-    "--game-speed",
-    default=None,
-    help="How many game steps per agent step (action/observation). None means use the map default",
 )
 @click.option(
     "--output-path",
@@ -96,7 +82,6 @@ def cli():
 def run(
     agent: str,
     environment: str,
-    render_interval: int,
     reward_decay: float,
     total_steps: int,
     unroll_length: int,
@@ -108,16 +93,12 @@ def run(
     critic_coeff: float,
     learning_rate: float,
     num_workers: int,
-    test_interval: int,
+    checkpoint_interval: int,
     seed: int,
     dryrun: bool,
-    game_speed: int,
-    update_epochs: int,
-    max_grad_norm: float,
     screen_size: int,
     normalize_advantages: bool,
     normalize_returns: bool,
-    anneal_lr: bool,
     output_path: str,
 ):
     if dryrun or agent == "random":
@@ -128,9 +109,7 @@ def run(
         entity="aidl-2021-betastar",
         config={
             "agent": agent,
-            "render_interval": render_interval,
             "reward_decay": reward_decay,
-            "update_epochs": update_epochs,
             "total_steps": total_steps,
             "unroll_length": unroll_length,
             "trace_decay": trace_decay,
@@ -143,13 +122,10 @@ def run(
             "num_workers": num_workers,
             "seed": seed,
             "environment": environment,
-            "game_speed": game_speed,
-            "test_interval": test_interval,
-            "max_grad_norm": max_grad_norm,
+            "checkpoint_interval": checkpoint_interval,
             "screen_size": screen_size,
             "normalize_advantages": normalize_advantages,
             "normalize_returns": normalize_returns,
-            "anneal_lr": anneal_lr,
             "output_path": output_path,
         },
         monitor_gym=False,
@@ -187,7 +163,7 @@ def run(
     type=click.Path(dir_okay=True, file_okay=False),
     default="./output",
 )
-def test(
+def play(
     model: str,
     episodes: int,
     output_path: str,
@@ -203,11 +179,11 @@ def test(
         {
             "output_path": str((Path(output_path) / wandb.run.id).absolute()),
             "num_workers": 1,
-            "episodes": episodes
+            "episodes": episodes,
         },
         allow_val_change=True,
     )
 
-    FullPPO(wandb.config).test(saved["parameters"])  # type: ignore
+    FullPPO(wandb.config).play(saved["parameters"])  # type: ignore
 
     display.stop()

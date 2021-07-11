@@ -6,9 +6,7 @@ import torch as T
 import torch
 import wandb
 from betastar.agents import base_agent
-from betastar.data import Trajectory, UnrollDataset, collate
-from betastar.envs.env import Action, ActionMask, PySC2Env, Value, spawn_env
-from betastar.player import Player
+from betastar.envs.env import PySC2Env, spawn_env
 from torch import nn
 from torch.distributions.categorical import Categorical
 from torch.optim import Adam
@@ -40,10 +38,9 @@ class PPO(base_agent.BaseAgent):
     def get_model(self, env: PySC2Env) -> nn.Module:
         raise NotImplementedError()
 
-    def test(self, parameters):
+    def play(self, parameters):
         env = spawn_env(
             self.config.environment,
-            self.config.game_speed,
             spatial_dim=self.config.screen_size,
             output_path="/tmp/nothing",
             monitor=False,
@@ -97,7 +94,6 @@ class PPO(base_agent.BaseAgent):
 
         env = spawn_env(
             self.config.environment,
-            self.config.game_speed,
             spatial_dim=self.config.screen_size,
             output_path=self.config.output_path,
             monitor=False,
@@ -115,12 +111,6 @@ class PPO(base_agent.BaseAgent):
 
         opt = Adam(
             model.parameters(), lr=self.config.learning_rate, betas=(0.92, 0.999)
-        )
-
-        total_cycles = (
-            self.config.total_steps
-            // self.config.unroll_length
-            * self.config.num_workers
         )
 
         cycles = 0
@@ -311,7 +301,7 @@ class PPO(base_agent.BaseAgent):
 
                 _played_steps = self.config.unroll_length * self.config.num_workers
 
-                if (cycles > 0 and cycles % self.config.test_interval == 0) or (
+                if (cycles > 0 and cycles % self.config.checkpoint_interval == 0) or (
                     step_n + _played_steps
                 ) >= self.config.total_steps:
                     metrics["video"] = self.last_video(step_n)
