@@ -79,7 +79,7 @@ def cli():
 @click.option(
     "--dryrun", is_flag=True, help="Whether to run wandb in dryrun mode or not"
 )
-def run(
+def train(
     agent: str,
     environment: str,
     reward_decay: float,

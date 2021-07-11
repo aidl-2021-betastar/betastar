@@ -49,7 +49,16 @@ ENV POETRY_VIRTUALENVS_CREATE=false
 
 RUN $HOME/conda/bin/pip install 'poetry==1.1.5'
 
+ENV TINI_VERSION v0.19.0
+ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
+RUN chmod +x /tini
+
+WORKDIR /workspace
+
 ADD pyproject.toml .
 ADD poetry.lock .
 ADD betastar betastar
 RUN $HOME/conda/bin/poetry install --no-dev
+
+ENTRYPOINT ["/tini", "--", "/root/conda/bin/python", "-m", "betastar"]
+# CMD [ "/root/conda/bin/python", "-m", "betastar" ]
