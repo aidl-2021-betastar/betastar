@@ -45,3 +45,5 @@ In the PPO implementation (John Schulman et al, 2017), a reasonable quantity to 
 As the name suggests, the Advantatge function contains the total reward obtained when the agent has followed the new policy. One must note that by just computing the rewards a perfectly valid proxy for evaluating the goodness of the change is easily available. AQUÍ COMENTAR SOBRE PQ ES MILLOR AMB UNA BASELINE O CRITIC. SUAMENT TRANSICIONAR CAP A UNA GENERALITZACIÓ DE N-STEP I GAE. NO SERÀ FÀCIL...
 
 ## Neural Network
+
+## PySC2 for Learning StarCraft2
