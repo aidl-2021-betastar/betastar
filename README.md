@@ -33,9 +33,9 @@ Replays and videos from this playtest will be under `./out` as well.
 
 ## Reinforcement Learning Algorithm
 
-In Reinforcement Learning  (RL) an agent interacts with a given environment via state visiting, action selection. After every pair (S,a) of these the environment returns a numerical reward (R) and then the agent transitions the next state (S'). Note that this transition may be entirely dependent on the 4 dimension vector (S,a,R,S') yielding a unique Markov Chain for each of the run episodes.
+In Reinforcement Learning  (RL) an agent interacts with a given environment via state visiting, action selection. After every pair (S,a) of these, the environment returns a numerical reward (R) and then the agent transitions the next state (S'). Note that this transition may be entirely dependent on the 4 dimension vector (S,a,R,S') yielding a unique Markov Chain for each of the run episodes.
 
-Developing and setting up the environment is a crucial yet not trivial part of any RL project. In this section, we will not provide this sort information; nonetheless, one can turn to section "PySC2 for Learning StarCraft2" for more details. Instead, here we will briefly review the Proximal Policy Optimization (PPO) algorithm which we chose to adapt the network parameters. Details on the network may be found in the following section. For the sake of clarity, we will not rely on the exact mathematical details but instead a 
+Developing and setting up the environment is a crucial yet not trivial part of any RL project. In this section, we will not provide this sort information; nonetheless, one can turn to section "PySC2 for Learning StarCraft2" for more details. Instead, here we will briefly review the Proximal Policy Optimization (PPO) algorithm which we chose to adapt the network parameters. Details on the network may be found in the following section. For the sake of clarity, we will not rely on the exact mathematical details but instead 
 provide a heuristic vision of such algorithm. However, appropiate references will always be provided.
 
 In RL (Sutton & Barto, 2018; Maxim Lapan, 2020), actions are selected with a given probability. Note that in each one of the environment's state (S) not all the actions may be available. For this reason, we shall define a policy as the probability of selecting an action (a) at given state (S). The goal of any RL algorithm is to addequately modify this policy in order to select the most optimal actions in each state of the environment, hence the name of Policy Optimization. 
@@ -46,7 +46,7 @@ As the name suggests, the Advantatge function contains the total reward obtained
 
 In addition, we used a more sophisticated version of this advantatge function called Generalized Advantatge Estimation (GAE). Nonetheless, the idea remains the same. This GAE has an optimal bias-variance trade-off which provides both nice stability and speed to the training progress. Detailed information may be found in John Schulman, 2017 and https://towardsdatascience.com/generalized-advantage-estimate-maths-and-code-b5d5bd3ce737.
 
-To conclude, we also added an entropy term to be backpropagated in the network. In RL it exists a fundamental problem called the "Exploration vs. Exploitation dilemma". Once the agent has a reasonably good policy, what is better, to keep exploting it or explore new states of the environment which may in the end report better outcomes. It has been shown (Haarnoja et al, 2017) that incorporating the entropy of the policy to the loss backpropagation optimaly helps to find an optimal solution to the afore mentioned dilemma. 
+To conclude, we also added an entropy term to be backpropagated in the network. In RL, it exists a fundamental problem called the "Exploration vs. Exploitation dilemma". Once the agent has a reasonably good policy, what is better, to keep exploting it or explore new states of the environment which may in the end report better outcomes? It has been shown (Haarnoja et al, 2017) that incorporating the entropy of the policy to the loss backpropagation optimaly helps to find an optimal solution to the afore mentioned dilemma. 
 
 ## Neural Network
 
