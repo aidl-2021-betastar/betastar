@@ -46,7 +46,7 @@ As the name suggests, the Advantatge function contains the total reward obtained
 
 In addition, we used a more sophisticated version of this advantatge function called Generalized Advantatge Estimation (GAE). Nonetheless, the idea remains the same. This GAE has an optimal bias-variance trade-off which provides both nice stability and speed to the training progress. Detailed information may be found in John Schulman, 2017 and https://towardsdatascience.com/generalized-advantage-estimate-maths-and-code-b5d5bd3ce737.
 
-To conclude, we also added an entropy term to be backpropagated in the network. In RL, it exists a fundamental problem called the "Exploration vs. Exploitation dilemma". Once the agent has a reasonably good policy, what is better, to keep exploting it or explore new states of the environment which may in the end report better outcomes? It has been shown (Haarnoja et al, 2017) that incorporating the entropy of the policy to the loss backpropagation optimaly helps to find an optimal solution to the afore mentioned dilemma. 
+To conclude, we also added an entropy term to be backpropagated in the network. In RL, it exists a fundamental problem called the "Exploration vs. Exploitation dilemma". Once the agent has a reasonably good policy, what is better, to keep exploting it or explore new states of the environment which may in the end report better outcomes? It has been shown (Haarnoja et al, 2017) that incorporating the entropy of the policy to the loss backpropagation helps to find an optimal solution to the afore mentioned dilemma. 
 
 ## Neural Network
 
