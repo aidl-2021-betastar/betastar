@@ -38,9 +38,10 @@ In Reinforcement Learning  (RL) an agent interacts with a given environment via 
 Developing and setting up the environment is a crucial yet not trivial part of any RL project. In this section, we will not provide this sort information; nonetheless, one can turn to section "PySC2 for Learning StarCraft2" for more details. Instead, here we will briefly review the Proximal Policy Optimization (PPO) algorithm which we chose to adapt the network parameters. Details on the network may be found in the following section. For the sake of clarity, we will not rely on the exact mathematical details but instead a 
 provide a heuristic vision of such algorithm. However, appropiate references will always be provided.
 
-In RL, actions are selected with a given probability. Note that in each one of the environment's state (S) not all the actions may be available. For this reason, we shall define a policy as the probability of selecting an action (a) in given state (S). 
-\begin{equation}
-\pi(a,S)
-\end{equation}
+In RL (Sutton & Barto, 2018; Maxim Lapan, 2020), actions are selected with a given probability. Note that in each one of the environment's state (S) not all the actions may be available. For this reason, we shall define a policy as the probability of selecting an action (a) in given state (S). The goal of any RL algorithm is to addequately modify this policy in order to select the most optimal actions in each state of the environment, hence the name of Policy Optimization. 
+
+In the PPO implementation (John Schulman et al, 2017), a reasonable quantity to backpropagate inside the network is the ratio between the actual policy and the previous one. This ratio, which is entirely dependent on the values for each one of the network parameters, provides an estimate of the change that the policy has undergone after a given update. However, this proxy does not take into account whether the proposed change in the policy was either good or bad. For this reason, we need to weight this ratio by the "Advantatge" of having changed the policy with respect to the provious one. 
+
+As the name suggests, the Advantatge function contains the total reward obtained when the agent has followed the new policy. One must note that by just computing the rewards a perfectly valid proxy for evaluating the goodness of the change is easily available. AQUÍ COMENTAR SOBRE PQ ES MILLOR AMB UNA BASELINE O CRITIC. SUAMENT TRANSICIONAR CAP A UNA GENERALITZACIÓ DE N-STEP I GAE. NO SERÀ FÀCIL...
 
 ## Neural Network
