@@ -80,3 +80,7 @@ Being confident we had deployable algorithms, we proceeded to setting up the Sta
 
 #### 3. Training the neural network
 
+In the end, with all the previous work we were able to succesfully train a RL agent to play and win some minigames of StarCraft 2. Achieving this was not easy and in fact we should comment two significant breakthroughs that helped us. The first one was the idea of simplifying the available actions the agents could choose. Thanks to this, we were able to debug more easily some highly non-trivial mistakes both with our algotihm training process and with the environment setup. Once we saw that this simplified trained agent could win the "MoveToBeacon" minigame, we deleted these modifications and started once again with the complete agent and environment. The second breakthrough is the finding of a paper (Vinyals et al, 2017) in which the authors developed deep neural networks that could be trained to play the same minigames we were aming for. Nonetheless, the main goal of our project can be considered as achieved since we have been able to train a deep neural network with Reinforcement Learning methods that could eventually find and defeat Zerglings... Here is a video to prove it!
+
+https://user-images.githubusercontent.com/75299844/125636947-028bf898-82ff-413b-bcb5-36a129e5f943.mp4
+
