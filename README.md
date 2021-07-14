@@ -33,7 +33,7 @@ To conclude, we also added an entropy term to be backpropagated in the network. 
 
 ## Neural Network
 
-
+![Screenshot 2021-07-12 at 19 57 14](https://user-images.githubusercontent.com/75299844/125630772-bc92ad42-810a-4f9e-bf5d-496b0205174d.png)
 
 ## Setup for development
 
@@ -79,6 +79,4 @@ During the first two months we focused on getting to know all the Reinforcement 
 Being confident we had deployable algorithms, we proceeded to setting up the StarCraft 2 environment. As mentioned earlier, we made use of PySC2 which already provides a wrapped set of methods specifically designed for our purpose. Far from being easy, we also had to invest a reasonable amount of time to dockerize everything so we could work on the project without any compatibility issue. One main drawback of PySC2 is the need to have StarCraft 2 installed. However, thanks to Docker, this was no longer required in our case. 
 
 #### 3. Training the neural network
-
-
 
