@@ -1,37 +1,16 @@
-# betastar
+# Betastar
 
 Mastering StarCraft 2 minigames with Reinforcement Learning.
+Authors: Txus Bach, Luis M. Etxenike, Joan Falcó, Oriol Gual
+Advisor: Dani Fojo
 
-## Training an agent
+## Introduction
 
-This will train a PPO agent for 1000 game steps (10M is more of a real training session) on MoveToBeacon and save replays, videos and the model in `./out`:
+Reinforcement Learning (RL) has been studied for more than 4 decades, however, it became famous right after DeepMind released a paper where they trained deep artificial neural networks to play a large amount of Atari Games achieving super-human scores. Since then, more sofisticated games have also been solved including Chess and Go. In a recent paper by a team in DeepMind (Vinyals et al, 2017) layed the ground for tackling a much more complex problem: building a RL model that could play StarCraft 2. In this project we attempt to solve some minigames of this game. 
 
-```
-docker build aidl/betastar:latest .
-docker run -it -v $PWD/out:/output aidl/betastar:latest train --agent full_ppo --environment SC2MoveToBeacon-v0 --output-path /output --total-steps 1000
-```
+This report is organized as follows. Initially, the description of the environment can be found. Next, we provide a brief sumamry of what is Reinforcement Learning as well as the algorithms we implemented. Then, we shall give details on the networks we trained as well as their limitations. Finally, the instructions to install all the dependencies as well as the general conclusions are presented.
 
-When wandb asks you for an API key (that's why we need the `-it`), you can enter one or select the third option (Don't visualize my results).
-
-## Playing with a trained agent
-
-From the previous step, you'll have a model at `./out/RUN_ID/last_model.pth`. You can see it in action like this:
-
-```
-docker build aidl/betastar:latest .
-docker run -it -v $PWD/out:/output aidl/betastar:latest play --model /output/RUN_ID/last_model.pth --episodes 4 --output-path /output
-```
-
-Replays and videos from this playtest will be under `./out` as well.
-
-## Setup for development
-
-1. Make sure you have Docker installed on your machine.
-2. Install VSCode.
-3. When you open the folder, it'll ask you to "Reopen in Container". Do it, and you're set!
-4. You might need to re-run `pip install poetry` after starting the container.
-
-## Reinforcement Learning Algorithm
+## Reinforcement Learning & Algorithms
 
 In Reinforcement Learning  (RL) an agent interacts with a given environment via state visiting, action selection. After every pair (S,a) of these, the environment returns a numerical reward (R) and then the agent transitions the next state (S'). Note that this transition may be entirely dependent on the 4 dimension vector (S,a,R,S') yielding a unique Markov Chain for each of the run episodes.
 
@@ -50,4 +29,37 @@ To conclude, we also added an entropy term to be backpropagated in the network. 
 
 ## Neural Network
 
-## PySC2 for Learning StarCraft2
+
+
+## Setup for development
+
+1. Make sure you have Docker installed on your machine.
+2. Install VSCode.
+3. When you open the folder, it'll ask you to "Reopen in Container". Do it, and you're set!
+4. You might need to re-run `pip install poetry` after starting the container.
+
+### Training an agent
+
+This will train a PPO agent for 1000 game steps (10M is more of a real training session) on MoveToBeacon and save replays, videos and the model in `./out`:
+
+```
+docker build aidl/betastar:latest .
+docker run -it -v $PWD/out:/output aidl/betastar:latest train --agent full_ppo --environment SC2MoveToBeacon-v0 --output-path /output --total-steps 1000
+```
+
+When wandb asks you for an API key (that's why we need the `-it`), you can enter one or select the third option (Don't visualize my results).
+
+### Playing with a trained agent
+
+From the previous step, you'll have a model at `./out/RUN_ID/last_model.pth`. You can see it in action like this:
+
+```
+docker build aidl/betastar:latest .
+docker run -it -v $PWD/out:/output aidl/betastar:latest play --model /output/RUN_ID/last_model.pth --episodes 4 --output-path /output
+```
+
+Replays and videos from this playtest will be under `./out` as well.
+
+## Conclusions
+
+
