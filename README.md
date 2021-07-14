@@ -33,7 +33,11 @@ To conclude, we also added an entropy term to be backpropagated in the network. 
 
 ## Neural Network
 
+Eventually, the final network architecture can be seen in the following figure.
+
 ![Screenshot 2021-07-12 at 19 57 14](https://user-images.githubusercontent.com/75299844/125630772-bc92ad42-810a-4f9e-bf5d-496b0205174d.png)
+
+The architecture may be summarized in three main blocks: an encoder in charge of capturing the meaningfull features of the screen (raw pixel input), minimap and scalar values; a multilinear perceptron and a final 
 
 ## Setup for development
 
