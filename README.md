@@ -10,6 +10,10 @@ Reinforcement Learning (RL) has been studied for more than 4 decades, however, i
 
 This report is organized as follows. Initially, the description of the environment can be found. Next, we provide a brief sumamry of what is Reinforcement Learning as well as the algorithms we implemented. Then, we shall give details on the networks we trained as well as their limitations. Finally, the instructions to install all the dependencies as well as the general conclusions are presented.
 
+## PySC2: StarCraft 2 environment for python
+
+
+
 ## Reinforcement Learning & Algorithms
 
 In Reinforcement Learning  (RL) an agent interacts with a given environment via state visiting, action selection. After every pair (S,a) of these, the environment returns a numerical reward (R) and then the agent transitions the next state (S'). Note that this transition may be entirely dependent on the 4 dimension vector (S,a,R,S') yielding a unique Markov Chain for each of the run episodes.
@@ -62,4 +66,11 @@ Replays and videos from this playtest will be under `./out` as well.
 
 ## Conclusions
 
+Our main conclusion is that Reinforcement Learning is both fascinating and difficult. For the sake of claritty, we shall divide our progress thorught this project. 
+
+During the first two months we focused on getting to know all the Reinforcement Learning background needed to face our main goal. We were able to understant several algorithms we later implemented to some benchmark problems of RL. This "toy" environments were basically CartPole, LunarLanding and MountainCar. We succesfully solved the first two. We were not able to validate our final algorithm implementation on MountainCar but we believe that this is due to the enormously number of training episodes requiered to solve the environment. Nonetheless, we have good reason to believe that, given the appropiate amount of training time, we would have solved the environment. In order to give a graphical description of the process, we present a gif containing the learning curves of all implemented algorithms in CartPole appearing in order of complexity. We must emphasize that, although Reinforce is very good at this particular environment, it is by far the least applicable in the majority of RL problems; including, of course, StarCraft 2. 
+
+![CartPole](https://user-images.githubusercontent.com/75299844/125626475-879ae103-af62-409f-83a7-736c16ac5d08.gif)
+
+Being confident we had deployable algorithms, we proceeded to setting up the StarCraft 2 environment. As mentioned earlier, we made use of PySC2 which already provides a set of tools 
 
