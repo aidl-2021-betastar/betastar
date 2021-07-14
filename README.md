@@ -84,3 +84,14 @@ In the end, with all the previous work we were able to succesfully train a RL ag
 
 https://user-images.githubusercontent.com/75299844/125636947-028bf898-82ff-413b-bcb5-36a129e5f943.mp4
 
+## Future Work
+
+Despite considering ourselves highly satisfied with the results, it is true that we were not able to adress some key issues. For starters, we did not have time to do hyperparameter tunning. The trained agents do astonishingly well in some minigames, even reaching DeepMind's performance, but in some others it layed far from it. We must insist in that all trained agents showed coherent behavior but perhaps is was not optimal. We hypothesize that with some hyperparameter tunning, their scores would significantly improve.
+
+And of course, we are forced to admit that our agents would not stand a chance against any professional player human or binary...
+
+## Acknowledgements
+
+We are grateful to our advisor Dani Fojo for very helpful comments regarding the implementation of various algorithms as well as some really enlightening discussions involving Reinforcement Learning, physics, mathematics, philosophy and life. 
+
+And finally, just remember that with the appropiate reward function you can train a monkey to behave like a human... and viceversa! 
