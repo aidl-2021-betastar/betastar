@@ -12,7 +12,7 @@ This report is organized as follows. Initially, the description of the environme
 
 ## PySC2: StarCraft 2 environment for python
 
-
+![1_-l5zyiih9yvox7o_0W_S2Q](https://user-images.githubusercontent.com/75299844/125631224-7bbbe707-4558-4092-8d9d-26056ee461cc.png)
 
 ## Reinforcement Learning & Algorithms
 
