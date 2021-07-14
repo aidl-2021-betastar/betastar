@@ -70,11 +70,15 @@ Our main conclusion is that Reinforcement Learning is both fascinating and diffi
 
 #### 1. Preliminaires
 
-During the first two months we focused on getting to know all the Reinforcement Learning background needed to face our main goal. We were able to understant several algorithms we later implemented to some benchmark problems of RL. This "toy" environments were basically CartPole, LunarLanding and MountainCar. We succesfully solved the first two. We were not able to validate our final algorithm implementation on MountainCar but we believe that this is due to the enormously number of training episodes requiered to solve the environment. Nonetheless, we have good reason to believe that, given the appropiate amount of training time, we would have solved the environment. In order to give a graphical description of the process, we present a gif containing the learning curves of all implemented algorithms in CartPole appearing in order of complexity. We must emphasize that, although Reinforce is very good at this particular environment, it is by far the least applicable in the majority of RL problems; including, of course, StarCraft 2. 
+During the first two months we focused on getting to know all the Reinforcement Learning background needed to face our main goal. We were able to understant several algorithms we later implemented to some benchmark problems of RL. This "toy" environments were basically CartPole, LunarLanding and MountainCar. We succesfully solved the first two. We were not able to validate our final algorithm implementation on MountainCar but we believe that this is due to the enormously number of training episodes requiered to solve the environment. Nonetheless, we have good reasons to believe that, given the appropiate amount of training time, we would have solved the it. In order to give a graphical description of the process, we present a gif containing the learning curves of all implemented algorithms in CartPole appearing in order of complexity. We must emphasize that, although Reinforce is very good at this particular environment, it is by far the least applicable in the majority of RL problems; including, of course, StarCraft 2. 
 
 ![CartPole](https://user-images.githubusercontent.com/75299844/125626475-879ae103-af62-409f-83a7-736c16ac5d08.gif)
 
 #### 2. Setting the environment
 
-Being confident we had deployable algorithms, we proceeded to setting up the StarCraft 2 environment. As mentioned earlier, we made use of PySC2 which already provides 
+Being confident we had deployable algorithms, we proceeded to setting up the StarCraft 2 environment. As mentioned earlier, we made use of PySC2 which already provides a wrapped set of methods specifically designed for our purpose. Far from being easy, we also had to invest a reasonable amount of time to dockerize everything so we could work on the project without any compatibility issue. One main drawback of PySC2 is the need to have StarCraft 2 installed. However, thanks to Docker, this was no longer required in our case. 
+
+#### 3. Training the neural network
+
+
 
