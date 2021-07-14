@@ -33,11 +33,13 @@ To conclude, we also added an entropy term to be backpropagated in the network. 
 
 ## Neural Network
 
-Eventually, the final network architecture can be seen in the following figure.
+Solving the CartPole environment poses no challenge in designing a network since it is eseentially a multilinear regression with two possible outputs. Convolutional neural networks have proven particularly useful in capturing relevant features present in images. Naively, we tried to build our own neural network from scratch, but eventually that this would takes us too long. We decided to do make use of other people's work. The final network architecture can be seen in the following figure.
 
 ![Screenshot 2021-07-12 at 19 57 14](https://user-images.githubusercontent.com/75299844/125630772-bc92ad42-810a-4f9e-bf5d-496b0205174d.png)
 
-The architecture may be summarized in three main blocks: an encoder in charge of capturing the meaningfull features of the screen (raw pixel input), minimap and scalar values; a multilinear perceptron and a final 
+The architecture may be summarized in three main blocks: an encoder in charge of capturing the meaningfull features of the screen (raw pixel input), minimap and scalar values; a multilinear perceptron and a three final linear layers that output spatial and non-spatial actions (Actor network) as well as the state value (Critic Network). The encoding of the minimap and the screen is achieved with a sequence of both 2D convolutions and 2D residual convolutions. Scalar features of the state space are encoded trough a series of fully connected layers. Following the encoder, a shared backbone between the actor and the critic flattens each one of the encoded features to later be connected with the output layers. 
+
+After having tried several architectures based on convolutions, residual convolutions and linear layers we decided to do dedicate more effort in finding already developed architectures rather than trying to develop one. Eventually, our final network was heavilty inspired by Vinyals et al, 2017.
 
 ## Setup for development
 
