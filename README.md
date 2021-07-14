@@ -14,6 +14,10 @@ This report is organized as follows. Initially, the description of the environme
 
 ![1_-l5zyiih9yvox7o_0W_S2Q](https://user-images.githubusercontent.com/75299844/125631224-7bbbe707-4558-4092-8d9d-26056ee461cc.png)
 
+One of the big challenges of StarCraft 2 is the fact that an action is a N-dimensional vector. Because of this, the network needs to learn how make a main action as well as to choose N-1 arguments sepecific to the selected action. To achieve this, we needed to define a probabilistic model of how this sequence of arguments is selected. To simplify we argued that each one of the arguments was selected independently of all the others (including the main action). Mathematically tthis translates to a product of independent probability distribution or, more conveniently, a summation of the logarithms of such distributions.
+
+![Captura](https://user-images.githubusercontent.com/75299844/125648396-4fdd4652-3e8b-4a93-a5c2-ef3350153bb2.JPG)
+
 ## Reinforcement Learning & Algorithms
 
 In Reinforcement Learning  (RL) an agent interacts with a given environment via state visiting, action selection. After every pair (S,a) of these, the environment returns a numerical reward (R) and then the agent transitions the next state (S'). Note that this transition may be entirely dependent on the 4 dimension vector (S,a,R,S') yielding a unique Markov Chain for each of the run episodes.
