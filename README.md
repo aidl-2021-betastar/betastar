@@ -64,7 +64,7 @@ docker run -it -v $PWD/out:/output aidl/betastar:latest play --model /output/RUN
 
 Replays and videos from this playtest will be under `./out` as well.
 
-## Conclusions
+## Progress & Conclusions
 
 Our main conclusion is that Reinforcement Learning is both fascinating and difficult. For the sake of claritty, we shall divide our progress thorught this project in three separate sections
 
