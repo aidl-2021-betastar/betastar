@@ -14,9 +14,23 @@ This report is organized as follows. Initially, the description of the environme
 
 ![1_-l5zyiih9yvox7o_0W_S2Q](https://user-images.githubusercontent.com/75299844/125631224-7bbbe707-4558-4092-8d9d-26056ee461cc.png)
 
-One of the big challenges of StarCraft 2 is the fact that an action is a N-dimensional vector. Because of this, the network needs to learn how make a main action as well as to choose N-1 arguments sepecific to the selected action. To achieve this, we needed to define a probabilistic model of how this sequence of arguments is selected. To simplify we argued that each one of the arguments was selected independently of all the others (including the main action). Mathematically tthis translates to a product of independent probability distribution or, more conveniently, a summation of the logarithms of such distributions.
+One of the big challenges of StarCraft 2 is the fact that an action is a N-dimensional vector. Because of this, the network needs to learn how make a main action as well as to choose N-1 arguments sepecific to the selected action. To achieve this, we needed to define a probabilistic model of how this sequence of arguments is selected. To simplify we argued that each one of the arguments was selected independently of all the others (including the main action). Mathematically this translates to a product of independent probability distribution or, more conveniently, a summation of the logarithms of such distributions.
 
 ![Captura](https://user-images.githubusercontent.com/75299844/125648396-4fdd4652-3e8b-4a93-a5c2-ef3350153bb2.JPG)
+
+### Observation space
+
+Thankfully, PySC2 gives us observations from the space not only in raw pixels, but also in full size feature maps of the screen and minimap that represent different aspects (height, visibility, units, etc). This makes encoding the state a lot easier than from raw pixels (due to the raw pixels using perspective, and units and buildings appearing smaller as they move to the north).
+
+As part of the observation, we also get a number of non-spatial features that represent scalar quantities of resources, hit points and so on. Most notably, we get a list of which actions are available at every time step, which we then leverage to do action masking on the raw policy logits as to never issue an action that's unavailable.
+
+### Action space
+
+The StarCraft 2 action space is a multi-discrete space in the form of a **function** and **arguments**. The function identifier is the first discrete action space, and each possible argument of all functions are flattened into separate discrete action spaces.
+
+We treat the different discrete action spaces as totally independent, even though they are obviously highly correlated, but it seems to work well enough for our purposes.
+
+For convenience, we set some sane defaults for certain high-dimensional arguments that are hard to learn and/or irrelevant for the minigames that we target. This helps us reduce the total action space considerably while preserving a rich behavioral space.
 
 ## Reinforcement Learning & Algorithms
 
@@ -44,35 +58,6 @@ Solving the CartPole environment poses no challenge in designing a network since
 The architecture may be summarized in three main blocks: an encoder in charge of capturing the meaningfull features of the screen (raw pixel input), minimap and scalar values; a multilinear perceptron and a three final linear layers that output spatial and non-spatial actions (Actor network) as well as the state value (Critic Network). The encoding of the minimap and the screen is achieved with a sequence of both 2D convolutions and 2D residual convolutions. Scalar features of the state space are encoded trough a series of fully connected layers. Following the encoder, a shared backbone between the actor and the critic flattens each one of the encoded features to later be connected with the output layers. 
 
 After having tried several architectures based on convolutions, residual convolutions and linear layers we decided to do dedicate more effort in finding already developed architectures rather than trying to develop one. Eventually, our final network was heavilty inspired by Vinyals et al, 2017.
-
-## Setup for development
-
-1. Make sure you have Docker installed on your machine.
-2. Install VSCode.
-3. When you open the folder, it'll ask you to "Reopen in Container". Do it, and you're set!
-4. You might need to re-run `pip install poetry` after starting the container.
-
-### Training an agent
-
-This will train a PPO agent for 1000 game steps (10M is more of a real training session) on MoveToBeacon and save replays, videos and the model in `./out`:
-
-```
-docker build aidl/betastar:latest .
-docker run -it -v $PWD/out:/output aidl/betastar:latest train --agent full_ppo --environment SC2MoveToBeacon-v0 --output-path /output --total-steps 1000
-```
-
-When wandb asks you for an API key (that's why we need the `-it`), you can enter one or select the third option (Don't visualize my results).
-
-### Playing with a trained agent
-
-From the previous step, you'll have a model at `./out/RUN_ID/last_model.pth`. You can see it in action like this:
-
-```
-docker build aidl/betastar:latest .
-docker run -it -v $PWD/out:/output aidl/betastar:latest play --model /output/RUN_ID/last_model.pth --episodes 4 --output-path /output
-```
-
-Replays and videos from this playtest will be under `./out` as well.
 
 ## Progress & Conclusions
 
@@ -104,4 +89,33 @@ And of course, we are forced to admit that in a real StarCraft 2 match, our agen
 
 We are grateful to our advisor Dani Fojo for very helpful comments regarding the implementation of various algorithms as well as some really enlightening discussions involving Reinforcement Learning, physics, mathematics, philosophy and life. 
 
-And finally, just remember that with the appropiate reward function you can train a monkey to behave like a human... and viceversa! 
+And finally, just remember that with the appropiate reward function you can train a monkey to behave like a human... and viceversa!
+
+## Setup for development
+
+1. Make sure you have Docker installed on your machine.
+2. Install VSCode.
+3. When you open the folder, it'll ask you to "Reopen in Container". Do it, and you're set!
+4. You might need to re-run `pip install poetry` after starting the container.
+
+### Training an agent
+
+This will train a PPO agent for 1000 game steps (10M is more of a real training session) on MoveToBeacon and save replays, videos and the model in `./out`:
+
+```
+docker build aidl/betastar:latest .
+docker run -it -v $PWD/out:/output aidl/betastar:latest train --agent full_ppo --environment SC2MoveToBeacon-v0 --output-path /output --total-steps 1000
+```
+
+When wandb asks you for an API key (that's why we need the `-it`), you can enter one or select the third option (Don't visualize my results).
+
+### Playing with a trained agent
+
+From the previous step, you'll have a model at `./out/RUN_ID/last_model.pth`. You can see it in action like this:
+
+```
+docker build aidl/betastar:latest .
+docker run -it -v $PWD/out:/output aidl/betastar:latest play --model /output/RUN_ID/last_model.pth --episodes 4 --output-path /output
+```
+
+Replays and videos from this playtest will be under `./out` as well.
