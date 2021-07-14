@@ -88,7 +88,7 @@ https://user-images.githubusercontent.com/75299844/125636947-028bf898-82ff-413b-
 
 Despite considering ourselves highly satisfied with the results, it is true that we were not able to adress some key issues. For starters, we did not have time to do hyperparameter tunning. The trained agents do astonishingly well in some minigames, even reaching DeepMind's performance, but in some others it layed far from it. We must insist in that all trained agents showed coherent behavior but perhaps is was not optimal. We hypothesize that with some hyperparameter tunning, their scores would significantly improve.
 
-And of course, we are forced to admit that our agents would not stand a chance against any professional player human or binary...
+And of course, we are forced to admit that in a real StarCraft 2 match, our agents would not stand a chance against any professional player human or binary...
 
 ## Acknowledgements
 
